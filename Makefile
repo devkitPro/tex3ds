@@ -1,4 +1,4 @@
-TARGET := $(notdir $(CURDIR))
+TARGET := 3dstex
 
 CFILES   := $(wildcard source/*.c)
 CXXFILES := $(wildcard source/*.cpp)
