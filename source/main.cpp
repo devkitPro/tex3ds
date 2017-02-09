@@ -422,9 +422,73 @@ void process_image(Magick::Image &img)
     std::free(buffer);
 }
 
+void print_usage(const char *prog)
+{
+  std::printf("Usage: %s [<format>] [-z <compression>] [-o <output>] <input>\n", prog);
+  std::printf(
+    "  Format options:\n"
+    "    -0, --rgba, --rgba8, --rgba888\n"
+    "      32-bit RGBA (8-bit components) (default)\n\n"
+
+    "    -1, --rgb, --rgb8, --rgb888\n"
+    "      24-bit RGB (8-bit components)\n\n"
+
+    "    -2, --rgba5551\n"
+    "      16-bit RGBA (5-bit RGB, 1-bit Alpha)\n\n"
+
+    "    -3, --rgb565\n"
+    "      16-bit RGB (5-bit Red/Blue, 6-bit Green)\n\n"
+
+    "    -4, --rgba4, --rgba444\n"
+    "      16-bit RGBA (4-bit components)\n\n"
+
+    "    -5, --la, --la8, --la88\n"
+    "      16-bit Luminance/Alpha (8-bit components)\n\n"
+
+    "    -6, --hilo, --hilo8, --hilo88\n"
+    "      16-bit HILO (8-bit components)\n"
+    "      Note: HI comes from Red channel, LO comes from Green channel\n\n"
+
+    "    -7, --l, --l8\n"
+    "      8-bit Luminance\n\n"
+
+    "    -8, --a, --a8\n"
+    "      8-bit Alpha\n\n"
+
+    "    -9, --la4, --la44\n"
+    "      8-bit Luminance/Alpha (4-bit components)\n\n"
+
+    "    -a, --l4\n"
+    "      4-bit Luminance\n\n"
+
+    "    -b, --a4\n"
+    "      4-bit Alpha\n\n"
+
+    "    -c, --etc1\n"
+    "      ETC1 (unsupported)\n\n"
+
+    "    -d, --etc1a4\n"
+    "      ETC1 with 4-bit Alpha (unsupported)\n\n"
+
+    "  Compression options:\n"
+    "    -z none              No compression (default)\n"
+    "    -z fake              Fake compression header\n"
+    "    -z huff, -z huffman  Huffman encoding (unsupported)\n"
+    "    -z lzss, -z lz10     LZSS compression\n"
+    "    -z lz11              LZ11 compression\n"
+    "    -z rle               Run-length encoding\n\n"
+
+    "    NOTE: All compression types (except 'none') use a GBA-style compression header: a single byte which denotes the compression type, followed by three bytes (little-endian) which specify the size of the uncompressed data.\n"
+    "    Types:\n"
+    "      0x00: Fake (uncompressed)\n"
+    "      0x10: LZSS\n"
+    "      0x11: LZ11\n"
+    "      0x28: Huffman encoding\n"
+    "      0x30: Run-length encoding\n"
+  );
 }
 
-static const struct option long_options[] =
+const struct option long_options[] =
 {
   { "rgba",     no_argument,       nullptr, '0', },
   { "rgba8",    no_argument,       nullptr, '0', },
@@ -457,12 +521,16 @@ static const struct option long_options[] =
   { nullptr,    no_argument,       nullptr,   0, },
 };
 
+}
+
 int main(int argc, char *argv[])
 {
+  const char *prog = argv[0];
+
   int c;
   int index;
 
-  while((c = ::getopt_long(argc, argv, "0123456789abcdo:s:ABCD", long_options, &index)) != -1)
+  while((c = ::getopt_long(argc, argv, "0123456789abcdho:s:ABCD", long_options, &index)) != -1)
   {
     switch(c)
     {
@@ -473,6 +541,10 @@ int main(int argc, char *argv[])
         output_format = static_cast<OutputFormat>(c);
         break;
 
+      case 'h':
+        print_usage(prog);
+        return EXIT_SUCCESS;
+
       case 'o':
         output_path = optarg;
         break;
@@ -482,6 +554,8 @@ int main(int argc, char *argv[])
           compression_format = COMPRESSION_NONE;
         else if(strcasecmp(optarg, "fake") == 0)
           compression_format = COMPRESSION_FAKE;
+        else if(strcasecmp(optarg, "huff") == 0 || strcasecmp(optarg, "huffman") == 0)
+          compression_format = COMPRESSION_HUFF;
         else if(strcasecmp(optarg, "lzss") == 0 || strcasecmp(optarg, "lz10") == 0)
           compression_format = COMPRESSION_LZ10;
         else if(strcasecmp(optarg, "lz11") == 0)
@@ -516,6 +590,7 @@ int main(int argc, char *argv[])
   if(optind == argc)
   {
     std::fprintf(stderr, "No image provided\n");
+    print_usage(prog);
     return EXIT_FAILURE;
   }
 
