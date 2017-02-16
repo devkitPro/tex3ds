@@ -509,7 +509,7 @@ huff_encode(const void *source,
   uint8_t       header[4];
   const uint8_t *src  = (const uint8_t*)source;
   node_t        *root = build_tree(src, len);
-  node_t        **lookup; 
+  node_t        **lookup;
   uint8_t       *tree;
   bitmap_t      *bitmap;
   size_t        count;
@@ -589,7 +589,7 @@ huff_encode(const void *source,
   }
 
   free(tree);
-  
+
   for(size_t i = 0; i < len; ++i)
   {
     node_t *node = lookup[src[i]];

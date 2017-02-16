@@ -113,10 +113,17 @@ void swizzle(Magick::PixelPacket *p)
 }
 
 template <int bits>
-unsigned int value(Magick::Quantum v)
+uint8_t value(Magick::Quantum v)
 {
   using Magick::Quantum;
   return (1<<bits) * v / (QuantumRange+1);
+}
+
+template <int bits>
+Magick::Quantum quantize(Magick::Quantum v)
+{
+  using Magick::Quantum;
+  return value<bits>(v) * QuantumRange / ((1<<bits)-1);
 }
 
 double gamma_inverse(double v)
@@ -221,7 +228,7 @@ void output_rgba4444(Magick::PixelPacket *p, Buffer &output)
 
     v = (value<4>(alpha(c))         <<  0)
       | (value<4>(c.blueQuantum())  <<  4)
-      | (value<4>(c.greenQuantum()) <<  8) 
+      | (value<4>(c.greenQuantum()) <<  8)
       | (value<4>(c.redQuantum())   << 12);
 
     output.push_back(v >> 0);
@@ -328,42 +335,415 @@ void output_etc1a4(Magick::PixelPacket *p, Buffer &output)
 {
 }
 
+void quantize_rgba8888(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<8>(c.redQuantum()));
+      c.greenQuantum(quantize<8>(c.greenQuantum()));
+      c.blueQuantum(quantize<8>(c.blueQuantum()));
+      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_rgb888(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<8>(c.redQuantum()));
+      c.greenQuantum(quantize<8>(c.greenQuantum()));
+      c.blueQuantum(quantize<8>(c.blueQuantum()));
+      c.alphaQuantum(0);
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_rgba5551(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<5>(c.redQuantum()));
+      c.greenQuantum(quantize<5>(c.greenQuantum()));
+      c.blueQuantum(quantize<5>(c.blueQuantum()));
+      c.alphaQuantum(quantize<1>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_rgb565(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<5>(c.redQuantum()));
+      c.greenQuantum(quantize<6>(c.greenQuantum()));
+      c.blueQuantum(quantize<5>(c.blueQuantum()));
+      c.alphaQuantum(0);
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_rgba4444(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<4>(c.redQuantum()));
+      c.greenQuantum(quantize<4>(c.greenQuantum()));
+      c.blueQuantum(quantize<4>(c.blueQuantum()));
+      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_la88(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+      Magick::Quantum l = quantize<8>(luminance(c));
+
+      c.redQuantum(l);
+      c.greenQuantum(l);
+      c.blueQuantum(l);
+      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_hilo88(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(quantize<8>(c.redQuantum()));
+      c.greenQuantum(quantize<8>(c.greenQuantum()));
+      c.blueQuantum(0);
+      c.alphaQuantum(0);
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_l8(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+      Magick::Quantum l = quantize<8>(luminance(c));
+
+      c.redQuantum(l);
+      c.greenQuantum(l);
+      c.blueQuantum(l);
+      c.alphaQuantum(0);
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_a8(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(0);
+      c.greenQuantum(0);
+      c.blueQuantum(0);
+      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_la44(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+      Magick::Quantum l = quantize<4>(luminance(c));
+
+      c.redQuantum(l);
+      c.greenQuantum(l);
+      c.blueQuantum(l);
+      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_l4(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+      Magick::Quantum l = quantize<4>(luminance(c));
+
+      c.redQuantum(l);
+      c.greenQuantum(l);
+      c.blueQuantum(l);
+      c.alphaQuantum(0);
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_a4(Magick::Image &img)
+{
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  for(size_t j = 0; j < img.rows(); ++j)
+  {
+    for(size_t i = 0; i < img.columns(); ++i)
+    {
+      Magick::Color c(*p);
+
+      c.redQuantum(0);
+      c.greenQuantum(0);
+      c.blueQuantum(0);
+      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+      *p++ = c;
+    }
+  }
+
+  cache.sync();
+}
+
+void quantize_etc1(Magick::Image &img)
+{
+}
+
+void quantize_etc1a4(Magick::Image &img)
+{
+}
+
 void process_image(Magick::Image img)
 {
   std::queue<Magick::Image> img_queue;
   Buffer buf;
   void (*output)(Magick::PixelPacket*,Buffer&);
+  void (*quantize)(Magick::Image&);
   void* (*compress)(const void*,size_t,size_t*);
 
   switch(output_format)
   {
-    case RGBA8888: output = output_rgba8888; break;
-    case RGB888:   output = output_rgb888;   break;
-    case RGBA5551: output = output_rgba5551; break;
-    case RGB565:   output = output_rgb565;   break;
-    case RGBA4444: output = output_rgba4444; break;
-    case LA88:     output = output_la88;     break;
-    case HILO88:   output = output_hilo88;   break;
-    case L8:       output = output_l8;       break;
-    case A8:       output = output_a8;       break;
-    case LA44:     output = output_la44;     break;
-    case L4:       output = output_l4;       break;
-    case A4:       output = output_a4;       break;
-    case ETC1:     output = output_etc1;     break;
-    case ETC1A4:   output = output_etc1a4;   break;
+    case RGBA8888:
+      output = output_rgba8888;
+      quantize = quantize_rgba8888;
+      break;
+
+    case RGB888:
+      output = output_rgb888;
+      quantize = quantize_rgb888;
+      break;
+
+    case RGBA5551:
+      output = output_rgba5551;
+      quantize = quantize_rgba5551;
+      break;
+
+    case RGB565:
+      output = output_rgb565;
+      quantize = quantize_rgb565;
+      break;
+
+    case RGBA4444:
+      output = output_rgba4444;
+      quantize = quantize_rgba4444;
+      break;
+
+    case LA88:
+      output = output_la88;
+      quantize = quantize_la88;
+      break;
+
+    case HILO88:
+      output = output_hilo88;
+      quantize = quantize_hilo88;
+      break;
+
+    case L8:
+      output = output_l8;
+      quantize = quantize_l8;
+      break;
+
+    case A8:
+      output = output_a8;
+      quantize = quantize_a8;
+      break;
+
+    case LA44:
+      output = output_la44;
+      quantize = quantize_la44;
+      break;
+
+    case L4:
+      output = output_l4;
+      quantize = quantize_l4;
+      break;
+
+    case A4:
+      output = output_a4;
+      quantize = quantize_a4;
+      break;
+
+    case ETC1:
+      output = output_etc1;
+      quantize = quantize_etc1;
+      break;
+
+    case ETC1A4:
+      output = output_etc1a4;
+      quantize = quantize_etc1a4;
+      break;
   }
 
   switch(compression_format)
   {
     case COMPRESSION_NONE:
-    case COMPRESSION_FAKE: compress = nullptr;     break;
-    case COMPRESSION_LZ10: compress = lzss_encode; break;
-    case COMPRESSION_LZ11: compress = lz11_encode; break;
-    case COMPRESSION_RLE:  compress = rle_encode;  break;
-    case COMPRESSION_HUFF: compress = huff_encode; break;
+    case COMPRESSION_FAKE:
+      compress = nullptr;
+      break;
+
+    case COMPRESSION_LZ10:
+      compress = lzss_encode;
+      break;
+
+    case COMPRESSION_LZ11:
+      compress = lz11_encode;
+      break;
+
+    case COMPRESSION_RLE:
+      compress = rle_encode;
+      break;
+
+    case COMPRESSION_HUFF:
+      compress = huff_encode;
+      break;
   }
 
+  img.modifyImage();
+  quantize(img);
   img_queue.push(img);
+
   if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
   {
     size_t width  = img.columns();
@@ -371,7 +751,8 @@ void process_image(Magick::Image img)
     size_t hoff   = 0;
     size_t woff   = width;
 
-    static const Magick::Color transparent(0, 0, 0, 0);
+    using Magick::Quantum;
+    static const Magick::Color transparent(0, 0, 0, QuantumRange);
     Magick::Image preview(Magick::Geometry(width*1.5, height), transparent);
     preview.composite(img, Magick::Geometry(0, 0, 0, 0), Magick::OverCompositeOp);
 
@@ -384,6 +765,7 @@ void process_image(Magick::Image img)
       width  = width / 2;
       height = height / 2;
       img.resize(Magick::Geometry(width, height));
+      quantize(img);
       img_queue.push(img);
 
       preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
@@ -394,6 +776,8 @@ void process_image(Magick::Image img)
       preview.write(preview_path);
   }
 
+  if(output_path.empty())
+    return;
 
   while(!img_queue.empty())
   {
@@ -473,7 +857,7 @@ void print_usage(const char *prog)
     "    <input>          Input file\n\n"
 
     "  Format options:\n"
-    "    -0, --rgba, --rgba8, --rgba888\n"
+    "    -0, --rgba, --rgba8, --rgba8888\n"
     "      32-bit RGBA (8-bit components) (default)\n\n"
 
     "    -1, --rgb, --rgb8, --rgb888\n"
@@ -591,9 +975,8 @@ int main(int argc, char *argv[])
   const char *prog = argv[0];
 
   int c;
-  int index;
 
-  while((c = ::getopt_long(argc, argv, "0123456789abcdhm:o:p:s:z:ABCD", long_options, &index)) != -1)
+  while((c = ::getopt_long(argc, argv, "0123456789abcdhm:o:p:s:z:ABCD", long_options, nullptr)) != -1)
   {
     switch(c)
     {

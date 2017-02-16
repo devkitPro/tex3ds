@@ -103,7 +103,7 @@ lzss_common_encode(const uint8_t *buffer,
     buffer_destroy(&result);
     return NULL;
   }
-  
+
   result.data[code_pos] = 0;
 
   while(len > 0)
