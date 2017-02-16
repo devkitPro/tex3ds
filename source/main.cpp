@@ -1,6 +1,5 @@
+#include "compat.h"
 #include <cmath>
-#include <cstdlib>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -8,11 +7,9 @@
 #include <vector>
 #include <Magick++.h>
 #include <getopt.h>
-#include "etc1.h"
 #include "compress.h"
 
-typedef std::shared_ptr<Magick::Image> Image;
-typedef std::vector<uint8_t>           Buffer;
+typedef std::vector<uint8_t> Buffer;
 
 namespace
 {
@@ -47,12 +44,12 @@ enum CompressionFormat
   COMPRESSION_HUFF,
 } compression_format = COMPRESSION_NONE;
 
-Image load_image(const char *path)
+Magick::Image load_image(const char *path)
 {
-  Image img = std::make_shared<Magick::Image>(Magick::Image(path));
-  img->comment(path);
+  Magick::Image img(path);
+  img.comment(path);
 
-  switch(img->columns())
+  switch(img.columns())
   {
     case    8: case   16: case   32: case   64:
     case  128: case  256: case  512: case 1024:
@@ -60,10 +57,10 @@ Image load_image(const char *path)
 
     default:
       std::fprintf(stderr, "%s: invalid width '%zu'\n",
-                   path, img->columns());
+                   path, img.columns());
   }
 
-  switch(img->rows())
+  switch(img.rows())
   {
     case    8: case   16: case   32: case   64:
     case  128: case  256: case  512: case 1024:
@@ -71,10 +68,10 @@ Image load_image(const char *path)
 
     default:
       std::fprintf(stderr, "%s: invalid height '%zu'\n",
-                   path, img->rows());
+                   path, img.rows());
   }
 
-  img->page(Magick::Geometry(img->columns(), img->rows()));
+  img.page(Magick::Geometry(img.columns(), img.rows()));
 
   return img;
 }
@@ -319,7 +316,7 @@ void output_etc1(Magick::PixelPacket *p, Buffer &output)
         }
       }
 
-      etc1_block(block);
+      //etc1_block(block);
     }
   }
 }
@@ -328,7 +325,7 @@ void output_etc1a4(Magick::PixelPacket *p, Buffer &output)
 {
 }
 
-void process_image(Magick::Image &img)
+void process_image(Magick::Image img)
 {
   Buffer buf;
   void (*output)(Magick::PixelPacket*,Buffer&);
@@ -599,7 +596,7 @@ int main(int argc, char *argv[])
 
   try
   {
-    process_image(*load_image(argv[optind]));
+    process_image(load_image(argv[optind]));
   }
   catch(const std::exception &e)
   {

@@ -7,7 +7,7 @@ OFILES   := $(subst source/,build/,$(CFILES:.c=.c.o)) \
 
 override COMMON_FLAGS := -g -Wall -Iinclude -pthread -D_GNU_SOURCE $(COMMON_FLAGS)
 override CFLAGS       := $(COMMON_FLAGS) -std=c99 $(CFLAGS)
-override CXXFLAGS     := $(COMMON_FLAGS) -std=c++11 \
+override CXXFLAGS     := $(COMMON_FLAGS) \
                          `Magick++-config --cxxflags --cppflags` \
                          $(CXXFLAGS)
 override LDFLAGS      := -pthread \

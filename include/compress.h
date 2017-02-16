@@ -1,8 +1,7 @@
 #pragma once
 
+#include "compat.h"
 #ifdef __cplusplus
-#include <cstddef>
-#include <cstdint>
 extern "C"
 {
 #else
