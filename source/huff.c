@@ -1,6 +1,7 @@
 #define COMPRESSION_INTERNAL
 #include "compress.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -189,9 +190,8 @@ leaf_count(node_t *n)
   return 1;
 }
 
-#if 1
-#define BITMAP_WORD_SIZE   (64)
-#define bitmap_t           uint64_t
+#define bitmap_t           uint32_t
+#define BITMAP_WORD_SIZE   (CHAR_BIT*sizeof(bitmap_t))
 #define BITMAP_WORDS(bits) (((bits)+(BITMAP_WORD_SIZE-1))/(BITMAP_WORD_SIZE))
 #define BITMAP_ALLOC(bits) (bitmap_t*)calloc(BITMAP_WORDS(bits), sizeof(bitmap_t))
 
@@ -213,6 +213,7 @@ static inline void
 bitmap_set(bitmap_t *bitmap,
            size_t   bit)
 {
+  assert(!(bitmap[bit/BITMAP_WORD_SIZE] & ((bitmap_t)1 << (bit % BITMAP_WORD_SIZE))));
   bitmap[bit/BITMAP_WORD_SIZE] |= ((bitmap_t)1 << (bit % BITMAP_WORD_SIZE));
 }
 
@@ -220,18 +221,24 @@ static inline void
 bitmap_reset(bitmap_t *bitmap,
              size_t   bit)
 {
+  assert(bitmap[bit/BITMAP_WORD_SIZE] & ((bitmap_t)1 << (bit % BITMAP_WORD_SIZE)));
   bitmap[bit/BITMAP_WORD_SIZE] &= ~((bitmap_t)1 << (bit % BITMAP_WORD_SIZE));
 }
 
 static inline ssize_t
 bitmap_find(const bitmap_t *bitmap,
-            size_t         bits)
+            size_t         bits,
+            size_t         pos)
 {
-  for(size_t i = 0; i < BITMAP_WORDS(bits); ++i)
+  for(size_t i = pos / BITMAP_WORD_SIZE; i < BITMAP_WORDS(bits); ++i)
   {
-    if(bitmap[i] != 0xFFFFFFFFFFFFFFFF)
+    if(bitmap[i] != ~(bitmap_t)0)
     {
-      for(size_t j = 0; j < BITMAP_WORD_SIZE && (i*BITMAP_WORD_SIZE+j) < bits; ++j)
+      size_t j = 0;
+      if(i == pos / BITMAP_WORD_SIZE)
+        j = pos % BITMAP_WORD_SIZE;
+
+      for(; j < BITMAP_WORD_SIZE && (i*BITMAP_WORD_SIZE+j) < bits; ++j)
       {
         if(!(bitmap[i] & ((bitmap_t)1 << j)))
           return i*BITMAP_WORD_SIZE + j;
@@ -273,7 +280,7 @@ encode_tree(uint8_t  *tree,
         if(leaf_count(node->child[1]) == 1)
           mask |= 0x40;
 
-        next = bitmap_find(bitmap, 512);
+        next = bitmap_find(bitmap, 512, node->pos);
         assert(next > node->pos);
         assert(next % 2 == 0);
         assert(bitmap_get(bitmap, next+0) == 0);
@@ -312,7 +319,7 @@ encode_tree(uint8_t  *tree,
     if(r_leaf == 1)
       mask |= 0x40;
 
-    next = bitmap_find(bitmap, 512);
+    next = bitmap_find(bitmap, 512, node->pos);
     assert(next > node->pos);
     assert(next % 2 == 0);
     assert(bitmap_get(bitmap, next+0) == 0);
@@ -349,63 +356,6 @@ encode_tree(uint8_t  *tree,
     encode_tree(tree, node->child[1], bitmap);
   }
 }
-#else
-static int
-encode_tree(uint8_t *tree,
-            node_t  *root,
-            size_t  p,
-            size_t  q)
-{
-  printf("%s pos=%zu next=%zu\n", __func__, p, q);
-  node_t       **stack, *node;
-  unsigned int r, s, mask;
-  unsigned int l_leafs, r_leafs;
-
-  if (leaf_count(root) <= 0x3F + 1) {
-    stack = (node_t**)calloc(leaf_count(root), sizeof(node_t*));
-
-    s = r = 0;
-    stack[r++] = root;
-
-    while (s < r) {
-      if (leaf_count(node = stack[s++]) == 1) {
-        if (s == 1) { tree[p]   = node->val; }
-        else        { tree[q++] = node->val; }
-      } else {
-        mask = 0;
-        if (leaf_count(node->child[0]) == 1) mask |= 0x80;
-        if (leaf_count(node->child[0]) == 1) mask |= 0x40;
-
-        if (s == 1) { tree[p]   = mask | ((r - s) >> 1); }
-        else        { tree[q++] = mask | ((r - s) >> 1); }
-
-        stack[r++] = node->child[0];
-        stack[r++] = node->child[0];
-      }
-    }
-
-    free(stack);
-  } else {
-    mask = 0;
-    if (leaf_count(root->child[0]) == 1) mask |= 0x80;
-    if (leaf_count(root->child[1]) == 1) mask |= 0x40;
-
-    tree[p] = mask;
-
-    if (leaf_count(root->child[0]) <= leaf_count(root->child[1])) {
-      l_leafs = encode_tree(tree, root->child[0], q,     q + 2);
-      r_leafs = encode_tree(tree, root->child[1], q + 1, q + (l_leafs << 1));
-      tree[q + 1] = l_leafs - 1;
-    } else {
-      r_leafs = encode_tree(tree, root->child[1], q + 1, q + 2);
-      l_leafs = encode_tree(tree, root->child[0], q,     q + (r_leafs << 1));
-      tree[q] = r_leafs - 1;
-    }
-  }
-
-  return leaf_count(root);
-}
-#endif
 
 static node_t*
 build_tree(const uint8_t *src,
@@ -618,7 +568,13 @@ huff_encode(const void *source,
   printf("==============\n");
   print_table(tree, 1, 0, 0);
 
-  exit(0);
+#if 0
+  free(tree);
+  node_free(root);
+  free(lookup);
+  return NULL;
+#endif
+
   buffer_init(&result);
   bitstream_init(&stream, &result);
 
