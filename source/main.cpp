@@ -2,7 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <memory>
+#include <queue>
 #include <stdexcept>
 #include <vector>
 #include <Magick++.h>
@@ -15,6 +15,7 @@ namespace
 {
 
 std::string output_path;
+std::string preview_path;
 
 enum OutputFormat
 {
@@ -43,6 +44,8 @@ enum CompressionFormat
   COMPRESSION_RLE,
   COMPRESSION_HUFF,
 } compression_format = COMPRESSION_NONE;
+
+Magick::FilterTypes filter_type = Magick::UndefinedFilter;
 
 Magick::Image load_image(const char *path)
 {
@@ -327,6 +330,7 @@ void output_etc1a4(Magick::PixelPacket *p, Buffer &output)
 
 void process_image(Magick::Image img)
 {
+  std::queue<Magick::Image> img_queue;
   Buffer buf;
   void (*output)(Magick::PixelPacket*,Buffer&);
   void* (*compress)(const void*,size_t,size_t*);
@@ -359,25 +363,63 @@ void process_image(Magick::Image img)
     case COMPRESSION_HUFF: compress = huff_encode; break;
   }
 
-  size_t width  = img.columns();
-  size_t height = img.rows();
-
-  img.modifyImage();
-  Magick::Pixels cache(img);
-
-  for(size_t j = 0; j < height; j += 8)
+  img_queue.push(img);
+  if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
   {
-    for(size_t i = 0; i < width; i += 8)
+    size_t width  = img.columns();
+    size_t height = img.rows();
+    size_t hoff   = 0;
+    size_t woff   = width;
+
+    static const Magick::Color transparent(0, 0, 0, 0);
+    Magick::Image preview(Magick::Geometry(width*1.5, height), transparent);
+    preview.composite(img, Magick::Geometry(0, 0, 0, 0), Magick::OverCompositeOp);
+
+    while(width > 8 && height > 8)
     {
-      Magick::PixelPacket *p = cache.get(i, j, 8, 8);
-      swizzle(p);
-      output(p, buf);
-      cache.sync();
+      img = img_queue.front();
+      img.modifyImage();
+      img.filterType(filter_type);
+
+      width  = width / 2;
+      height = height / 2;
+      img.resize(Magick::Geometry(width, height));
+      img_queue.push(img);
+
+      preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
+      hoff += img.rows();
+    }
+
+    if(!preview_path.empty())
+      preview.write(preview_path);
+  }
+
+
+  while(!img_queue.empty())
+  {
+    img = img_queue.front();
+    img_queue.pop();
+
+    size_t width  = img.columns();
+    size_t height = img.rows();
+
+    img.modifyImage();
+    Magick::Pixels cache(img);
+
+    for(size_t j = 0; j < height; j += 8)
+    {
+      for(size_t i = 0; i < width; i += 8)
+      {
+        Magick::PixelPacket *p = cache.get(i, j, 8, 8);
+        swizzle(p);
+        output(p, buf);
+        cache.sync();
+      }
     }
   }
 
   if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
-    std::fprintf(stderr, "Warning: output size exceeds header limit\n");
+    std::fprintf(stderr, "Warning: output size exceeds compression header limit\n");
 
   FILE *fp = std::fopen(output_path.c_str(), "wb");
 
@@ -421,8 +463,15 @@ void process_image(Magick::Image img)
 
 void print_usage(const char *prog)
 {
-  std::printf("Usage: %s [<format>] [-z <compression>] [-o <output>] <input>\n", prog);
+  std::printf("Usage: %s [<format>] [-m <filter>] [-o <output>] [-p <preview>] [-z <compression>] <input>\n", prog);
   std::printf(
+    "    <format>         See \"Format options\"\n"
+    "    -m <filter>      Generate mipmaps. See \"Filter options\"\n"
+    "    -o <output>      Output file\n"
+    "    -p <preview>     Output preview file\n"
+    "    -z <compression> Compress output. See \"Compression options\"\n"
+    "    <input>          Input file\n\n"
+
     "  Format options:\n"
     "    -0, --rgba, --rgba8, --rgba888\n"
     "      32-bit RGBA (8-bit components) (default)\n\n"
@@ -467,10 +516,27 @@ void print_usage(const char *prog)
     "    -d, --etc1a4\n"
     "      ETC1 with 4-bit Alpha (unsupported)\n\n"
 
+    "  Filter options:\n"
+    "    -m bessel     Bessel filter\n"
+    "    -m blackman   Blackman filter\n"
+    "    -m box        Box filter\n"
+    "    -m catrom     Catrom filter\n"
+    "    -m cubic      Cubic filter\n"
+    "    -m gaussian   Gaussian filter\n"
+    "    -m hamming    Hamming filter\n"
+    "    -m hanning    Hanning filter\n"
+    "    -m hermite    Hermite filter\n"
+    "    -m lanczos    Lanczos filter\n"
+    "    -m mitchell   Mitchell filter\n"
+    "    -m point      Point filter\n"
+    "    -m quadratic  Quadratic filter\n"
+    "    -m sinc       Sinc filter\n"
+    "    -m triangle   Triangle filter\n\n"
+
     "  Compression options:\n"
     "    -z none              No compression (default)\n"
     "    -z fake              Fake compression header\n"
-    "    -z huff, -z huffman  Huffman encoding (unsupported)\n"
+    "    -z huff, -z huffman  Huffman encoding (unsupported, possible to produce garbage)\n"
     "    -z lzss, -z lz10     LZSS compression\n"
     "    -z lz11              LZ11 compression\n"
     "    -z rle               Run-length encoding\n\n"
@@ -527,7 +593,7 @@ int main(int argc, char *argv[])
   int c;
   int index;
 
-  while((c = ::getopt_long(argc, argv, "0123456789abcdho:s:z:ABCD", long_options, &index)) != -1)
+  while((c = ::getopt_long(argc, argv, "0123456789abcdhm:o:p:s:z:ABCD", long_options, &index)) != -1)
   {
     switch(c)
     {
@@ -542,8 +608,50 @@ int main(int argc, char *argv[])
         print_usage(prog);
         return EXIT_SUCCESS;
 
+      case 'm':
+        if(strcasecmp(optarg, "bessel") == 0)
+          filter_type = Magick::BesselFilter;
+        else if(strcasecmp(optarg, "blackman") == 0)
+          filter_type = Magick::BlackmanFilter;
+        else if(strcasecmp(optarg, "box") == 0)
+          filter_type = Magick::BoxFilter;
+        else if(strcasecmp(optarg, "catrom") == 0)
+          filter_type = Magick::CatromFilter;
+        else if(strcasecmp(optarg, "cubic") == 0)
+          filter_type = Magick::CubicFilter;
+        else if(strcasecmp(optarg, "gaussian") == 0)
+          filter_type = Magick::GaussianFilter;
+        else if(strcasecmp(optarg, "hamming") == 0)
+          filter_type = Magick::HammingFilter;
+        else if(strcasecmp(optarg, "hanning") == 0)
+          filter_type = Magick::HanningFilter;
+        else if(strcasecmp(optarg, "hermite") == 0)
+          filter_type = Magick::HermiteFilter;
+        else if(strcasecmp(optarg, "lanczos") == 0)
+          filter_type = Magick::LanczosFilter;
+        else if(strcasecmp(optarg, "mitchell") == 0)
+          filter_type = Magick::MitchellFilter;
+        else if(strcasecmp(optarg, "point") == 0)
+          filter_type = Magick::PointFilter;
+        else if(strcasecmp(optarg, "quadratic") == 0)
+          filter_type = Magick::QuadraticFilter;
+        else if(strcasecmp(optarg, "sinc") == 0)
+          filter_type = Magick::SincFilter;
+        else if(strcasecmp(optarg, "triangle") == 0)
+          filter_type = Magick::TriangleFilter;
+        else
+        {
+          std::fprintf(stderr, "Invalid mipmap filter option '%s'\n", optarg);
+          return EXIT_FAILURE;
+        }
+        break;
+
       case 'o':
         output_path = optarg;
+        break;
+
+      case 'p':
+        preview_path = optarg;
         break;
 
       case 'z':
