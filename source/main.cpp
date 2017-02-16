@@ -527,7 +527,7 @@ int main(int argc, char *argv[])
   int c;
   int index;
 
-  while((c = ::getopt_long(argc, argv, "0123456789abcdho:s:ABCD", long_options, &index)) != -1)
+  while((c = ::getopt_long(argc, argv, "0123456789abcdho:s:z:ABCD", long_options, &index)) != -1)
   {
     switch(c)
     {
