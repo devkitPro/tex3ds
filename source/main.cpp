@@ -1,4 +1,5 @@
 #include "compat.h"
+#include "thread.h"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -788,10 +789,58 @@ void quantize_etc1a4(Magick::Image &img)
   cache.sync();
 }
 
+struct WorkUnit
+{
+  Buffer              result;
+  uint64_t            sequence;
+  Magick::PixelPacket *p;
+  void (*output)(Magick::PixelPacket*,Buffer&);
+
+  bool operator<(const WorkUnit &other) const
+  {
+    /* greater-than for min-heap */
+    return sequence > other.sequence;
+  }
+};
+
+std::queue<WorkUnit>          work_queue;
+std::priority_queue<WorkUnit> result_queue;
+
+std::condition_variable work_cond;
+std::condition_variable result_cond;
+std::mutex              work_mutex;
+std::mutex              result_mutex;
+bool                    work_done = false;
+
+THREAD_RETURN_T work_thread(void *param)
+{
+  std::unique_lock<std::mutex> mutex(work_mutex);
+  while(true)
+  {
+    while(!work_done && work_queue.empty())
+      work_cond.wait(mutex);
+
+    if(work_done && work_queue.empty())
+      THREAD_EXIT;
+
+    WorkUnit work = work_queue.front();
+    work_queue.pop();
+    mutex.unlock();
+
+    swizzle(work.p);
+    work.output(work.p, work.result);
+
+    result_mutex.lock();
+    result_queue.push(work);
+    result_cond.notify_one();
+    result_mutex.unlock();
+
+    mutex.lock();
+  }
+}
+
 void process_image(Magick::Image img)
 {
-  std::queue<Magick::Image> img_queue;
-  Buffer buf;
   void (*output)(Magick::PixelPacket*,Buffer&);
   void (*quantize)(Magick::Image&);
   void* (*compress)(const void*,size_t,size_t*);
@@ -895,9 +944,22 @@ void process_image(Magick::Image img)
       break;
   }
 
-  img.modifyImage();
-  quantize(img);
+  std::queue<Magick::Image> img_queue;
   img_queue.push(img);
+
+  using Magick::Quantum;
+  static const Magick::Color transparent(0, 0, 0, QuantumRange);
+  size_t preview_width = img.columns();
+  if(!preview_path.empty())
+    preview_width = preview_width * 1.5;
+  Magick::Image preview(Magick::Geometry(preview_width, img.rows()), transparent);
+
+  if(!preview_path.empty())
+  {
+    img.modifyImage();
+    quantize(img);
+    preview.composite(img, Magick::Geometry(0, 0, 0, 0), Magick::OverCompositeOp);
+  }
 
   if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
   {
@@ -905,11 +967,6 @@ void process_image(Magick::Image img)
     size_t height = img.rows();
     size_t hoff   = 0;
     size_t woff   = width;
-
-    using Magick::Quantum;
-    static const Magick::Color transparent(0, 0, 0, QuantumRange);
-    Magick::Image preview(Magick::Geometry(width*1.5, height), transparent);
-    preview.composite(img, Magick::Geometry(0, 0, 0, 0), Magick::OverCompositeOp);
 
     while(width > 8 && height > 8)
     {
@@ -920,20 +977,30 @@ void process_image(Magick::Image img)
       width  = width / 2;
       height = height / 2;
       img.resize(Magick::Geometry(width, height));
-      quantize(img);
       img_queue.push(img);
 
-      preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
+      if(!preview_path.empty())
+      {
+        img.modifyImage();
+        quantize(img);
+        preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
+      }
+
       hoff += img.rows();
     }
-
-    if(!preview_path.empty())
-      preview.write(preview_path);
   }
+
+  if(!preview_path.empty())
+    preview.write(preview_path);
 
   if(output_path.empty())
     return;
 
+  std::vector<std::thread> workers;
+  for(size_t i = 0; i < NUM_THREADS; ++i)
+    workers.push_back(std::thread(work_thread, nullptr));
+
+  Buffer buf;
   while(!img_queue.empty())
   {
     img = img_queue.front();
@@ -945,16 +1012,52 @@ void process_image(Magick::Image img)
     img.modifyImage();
     Magick::Pixels cache(img);
 
+    uint64_t num_work = 0;
     for(size_t j = 0; j < height; j += 8)
     {
       for(size_t i = 0; i < width; i += 8)
       {
-        Magick::PixelPacket *p = cache.get(i, j, 8, 8);
-        swizzle(p);
-        output(p, buf);
-        cache.sync();
+        WorkUnit work;
+
+        work.sequence = num_work++;
+        work.p = cache.get(i, j, 8, 8);
+        work.output = output;
+
+        work_mutex.lock();
+        work_queue.push(work);
+        work_cond.notify_one();
+        work_mutex.unlock();
       }
     }
+
+    if(img_queue.empty())
+    {
+      work_mutex.lock();
+      work_done = true;
+      work_cond.notify_all();
+      work_mutex.unlock();
+    }
+
+    for(uint64_t num_result = 0; num_result < num_work; ++num_result)
+    {
+      std::unique_lock<std::mutex> mutex(result_mutex);
+      while(result_queue.empty() || result_queue.top().sequence != num_result)
+        result_cond.wait(mutex);
+
+      WorkUnit work = result_queue.top();
+      result_queue.pop();
+      mutex.unlock();
+
+      buf.insert(buf.end(), work.result.begin(), work.result.end());
+
+      mutex.lock();
+    }
+  }
+
+  while(!workers.empty())
+  {
+    workers.back().join();
+    workers.pop_back();
   }
 
   if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
