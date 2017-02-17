@@ -114,17 +114,24 @@ void swizzle(Magick::PixelPacket *p)
 }
 
 template <int bits>
-uint8_t value(Magick::Quantum v)
+uint8_t quantum_to_bits(Magick::Quantum v)
 {
   using Magick::Quantum;
   return (1<<bits) * v / (QuantumRange+1);
 }
 
 template <int bits>
+Magick::Quantum bits_to_quantum(uint8_t v)
+{
+  using Magick::Quantum;
+  return v * QuantumRange / ((1<<bits)-1);
+}
+
+template <int bits>
 Magick::Quantum quantize(Magick::Quantum v)
 {
   using Magick::Quantum;
-  return value<bits>(v) * QuantumRange / ((1<<bits)-1);
+  return quantum_to_bits<bits>(v) * QuantumRange / ((1<<bits)-1);
 }
 
 double gamma_inverse(double v)
@@ -168,10 +175,10 @@ void output_rgba8888(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(alpha(c)));
-    output.push_back(value<8>(c.blueQuantum()));
-    output.push_back(value<8>(c.greenQuantum()));
-    output.push_back(value<8>(c.redQuantum()));
+    output.push_back(quantum_to_bits<8>(alpha(c)));
+    output.push_back(quantum_to_bits<8>(c.blueQuantum()));
+    output.push_back(quantum_to_bits<8>(c.greenQuantum()));
+    output.push_back(quantum_to_bits<8>(c.redQuantum()));
   }
 }
 
@@ -181,9 +188,9 @@ void output_rgb888(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(c.blueQuantum()));
-    output.push_back(value<8>(c.greenQuantum()));
-    output.push_back(value<8>(c.redQuantum()));
+    output.push_back(quantum_to_bits<8>(c.blueQuantum()));
+    output.push_back(quantum_to_bits<8>(c.greenQuantum()));
+    output.push_back(quantum_to_bits<8>(c.redQuantum()));
   }
 }
 
@@ -194,10 +201,10 @@ void output_rgba5551(Magick::PixelPacket *p, Buffer &output)
     unsigned int  v;
     Magick::Color c = p[i];
 
-    v = (value<5>(c.redQuantum())   << 11)
-      | (value<5>(c.greenQuantum()) <<  6)
-      | (value<5>(c.blueQuantum())  <<  1)
-      | (value<1>(alpha(c))         <<  0);
+    v = (quantum_to_bits<5>(c.redQuantum())   << 11)
+      | (quantum_to_bits<5>(c.greenQuantum()) <<  6)
+      | (quantum_to_bits<5>(c.blueQuantum())  <<  1)
+      | (quantum_to_bits<1>(alpha(c))         <<  0);
 
     output.push_back(v >> 0);
     output.push_back(v >> 8);
@@ -211,9 +218,9 @@ void output_rgb565(Magick::PixelPacket *p, Buffer &output)
     unsigned int  v;
     Magick::Color c = p[i];
 
-    v = (value<5>(c.redQuantum())   << 11)
-      | (value<6>(c.greenQuantum()) <<  5)
-      | (value<5>(c.blueQuantum())  <<  0);
+    v = (quantum_to_bits<5>(c.redQuantum())   << 11)
+      | (quantum_to_bits<6>(c.greenQuantum()) <<  5)
+      | (quantum_to_bits<5>(c.blueQuantum())  <<  0);
 
     output.push_back(v >> 0);
     output.push_back(v >> 8);
@@ -227,10 +234,10 @@ void output_rgba4444(Magick::PixelPacket *p, Buffer &output)
     unsigned int  v;
     Magick::Color c = p[i];
 
-    v = (value<4>(alpha(c))         <<  0)
-      | (value<4>(c.blueQuantum())  <<  4)
-      | (value<4>(c.greenQuantum()) <<  8)
-      | (value<4>(c.redQuantum())   << 12);
+    v = (quantum_to_bits<4>(alpha(c))         <<  0)
+      | (quantum_to_bits<4>(c.blueQuantum())  <<  4)
+      | (quantum_to_bits<4>(c.greenQuantum()) <<  8)
+      | (quantum_to_bits<4>(c.redQuantum())   << 12);
 
     output.push_back(v >> 0);
     output.push_back(v >> 8);
@@ -243,8 +250,8 @@ void output_la88(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(alpha(c)));
-    output.push_back(value<8>(luminance(c)));
+    output.push_back(quantum_to_bits<8>(alpha(c)));
+    output.push_back(quantum_to_bits<8>(luminance(c)));
   }
 }
 
@@ -254,8 +261,8 @@ void output_hilo88(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(c.greenQuantum()));
-    output.push_back(value<8>(c.redQuantum()));
+    output.push_back(quantum_to_bits<8>(c.greenQuantum()));
+    output.push_back(quantum_to_bits<8>(c.redQuantum()));
   }
 }
 
@@ -265,7 +272,7 @@ void output_l8(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(luminance(c)));
+    output.push_back(quantum_to_bits<8>(luminance(c)));
   }
 }
 
@@ -275,7 +282,7 @@ void output_a8(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back(value<8>(alpha(c)));
+    output.push_back(quantum_to_bits<8>(alpha(c)));
   }
 }
 
@@ -285,8 +292,8 @@ void output_la44(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c = p[i];
 
-    output.push_back((value<4>(luminance(c)) << 4)
-                   | (value<4>(alpha(c))     << 0));
+    output.push_back((quantum_to_bits<4>(luminance(c)) << 4)
+                   | (quantum_to_bits<4>(alpha(c))     << 0));
   }
 }
 
@@ -296,8 +303,8 @@ void output_l4(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c1 = p[i], c2 = p[i+1];
 
-    output.push_back((value<4>(luminance(c1)) << 0)
-                   | (value<4>(luminance(c2)) << 4));
+    output.push_back((quantum_to_bits<4>(luminance(c1)) << 0)
+                   | (quantum_to_bits<4>(luminance(c2)) << 4));
   }
 }
 
@@ -307,8 +314,8 @@ void output_a4(Magick::PixelPacket *p, Buffer &output)
   {
     Magick::Color c1 = p[i], c2 = p[i+1];
 
-    output.push_back((value<8>(alpha(c1)) << 0)
-                   | (value<8>(alpha(c2)) << 4));
+    output.push_back((quantum_to_bits<8>(alpha(c1)) << 0)
+                   | (quantum_to_bits<8>(alpha(c2)) << 4));
   }
 }
 
@@ -330,9 +337,9 @@ void output_etc1(Magick::PixelPacket *p, Buffer &output)
         {
           Magick::Color c(p[j*8+i+y*4+x]);
 
-          in_block[y*16+x*4+0] = value<8>(c.redQuantum());
-          in_block[y*16+x*4+1] = value<8>(c.greenQuantum());
-          in_block[y*16+x*4+2] = value<8>(c.blueQuantum());
+          in_block[y*16+x*4+0] = quantum_to_bits<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = quantum_to_bits<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = quantum_to_bits<8>(c.blueQuantum());
           in_block[y*16+x*4+3] = 0xFF;
         }
       }
@@ -363,15 +370,15 @@ void output_etc1a4(Magick::PixelPacket *p, Buffer &output)
         {
           Magick::Color c(p[j*8+i+y*4+x]);
 
-          in_block[y*16+x*4+0] = value<8>(c.redQuantum());
-          in_block[y*16+x*4+1] = value<8>(c.greenQuantum());
-          in_block[y*16+x*4+2] = value<8>(c.blueQuantum());
+          in_block[y*16+x*4+0] = quantum_to_bits<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = quantum_to_bits<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = quantum_to_bits<8>(c.blueQuantum());
           in_block[y*16+x*4+3] = 0xFF;
 
           if(y & 1)
-            out_alpha[2*x+y/2] |= (value<4>(alpha(c)) << 4);
+            out_alpha[2*x+y/2] |= (quantum_to_bits<4>(alpha(c)) << 4);
           else
-            out_alpha[2*x+y/2] |= value<4>(alpha(c));
+            out_alpha[2*x+y/2] |= quantum_to_bits<4>(alpha(c));
         }
       }
 
@@ -679,10 +686,106 @@ void quantize_a4(Magick::Image &img)
 
 void quantize_etc1(Magick::Image &img)
 {
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  rg_etc1::etc1_pack_params params;
+  params.clear();
+
+  for(size_t j = 0; j < img.rows(); j += 4)
+  {
+    for(size_t i = 0; i < img.columns(); i += 4)
+    {
+      uint8_t in_block[4*4*4];
+      uint8_t out_block[8];
+
+      for(size_t y = 0; y < 4; ++y)
+      {
+        for(size_t x = 0; x < 4; ++x)
+        {
+          Magick::Color c(p[(j+y)*img.columns()+i+x]);
+
+          in_block[y*16+x*4+0] = quantum_to_bits<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = quantum_to_bits<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = quantum_to_bits<8>(c.blueQuantum());
+          in_block[y*16+x*4+3] = 0xFF;
+        }
+      }
+
+      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
+      rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
+
+      for(size_t y = 0; y < 4; ++y)
+      {
+        for(size_t x = 0; x < 4; ++x)
+        {
+          Magick::Color c;
+
+          c.redQuantum(bits_to_quantum<8>(in_block[y*16+x*4+0]));
+          c.greenQuantum(bits_to_quantum<8>(in_block[y*16+x*4+1]));
+          c.blueQuantum(bits_to_quantum<8>(in_block[y*16+x*4+2]));
+          c.alphaQuantum(0);
+
+          p[(j+y)*img.columns()+i+x] = c;
+        }
+      }
+    }
+  }
+
+  cache.sync();
 }
 
 void quantize_etc1a4(Magick::Image &img)
 {
+  img.modifyImage();
+  Magick::Pixels cache(img);
+  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+  rg_etc1::etc1_pack_params params;
+  params.clear();
+
+  for(size_t j = 0; j < img.rows(); j += 4)
+  {
+    for(size_t i = 0; i < img.columns(); i += 4)
+    {
+      uint8_t in_block[4*4*4];
+      uint8_t out_block[8];
+
+      for(size_t y = 0; y < 4; ++y)
+      {
+        for(size_t x = 0; x < 4; ++x)
+        {
+          Magick::Color c(p[(j+y)*img.columns()+i+x]);
+
+          in_block[y*16+x*4+0] = quantum_to_bits<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = quantum_to_bits<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = quantum_to_bits<8>(c.blueQuantum());
+          in_block[y*16+x*4+3] = 0xFF;
+        }
+      }
+
+      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
+      rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
+
+      for(size_t y = 0; y < 4; ++y)
+      {
+        for(size_t x = 0; x < 4; ++x)
+        {
+          Magick::Color c(p[(j+y)*img.columns()+i+x]);
+
+          c.redQuantum(bits_to_quantum<8>(in_block[y*16+x*4+0]));
+          c.greenQuantum(bits_to_quantum<8>(in_block[y*16+x*4+1]));
+          c.blueQuantum(bits_to_quantum<8>(in_block[y*16+x*4+2]));
+          c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+          p[(j+y)*img.columns()+i+x] = c;
+        }
+      }
+    }
+  }
+
+  cache.sync();
 }
 
 void process_image(Magick::Image img)
