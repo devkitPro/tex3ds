@@ -8,6 +8,7 @@
 #include <Magick++.h>
 #include <getopt.h>
 #include "compress.h"
+#include "rg_etc1.h"
 
 typedef std::vector<uint8_t> Buffer;
 
@@ -313,26 +314,75 @@ void output_a4(Magick::PixelPacket *p, Buffer &output)
 
 void output_etc1(Magick::PixelPacket *p, Buffer &output)
 {
+  rg_etc1::etc1_pack_params params;
+  params.clear();
+
   for(size_t j = 0; j < 8; j += 4)
   {
     for(size_t i = 0; i < 8; i += 4)
     {
-      Magick::Color block[16];
+      uint8_t in_block[4*4*4];
+      uint8_t out_block[8];
+
       for(size_t y = 0; y < 4; ++y)
       {
         for(size_t x = 0; x < 4; ++x)
         {
-          block[y*4+x] = p[(j+y)*8+i+x];
+          Magick::Color c(p[j*8+i+y*4+x]);
+
+          in_block[y*16+x*4+0] = value<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = value<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = value<8>(c.blueQuantum());
+          in_block[y*16+x*4+3] = 0xFF;
         }
       }
 
-      //etc1_block(block);
+      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
+      for(size_t i = 0; i < 8; ++i)
+        output.push_back(out_block[8-i-1]);
     }
   }
 }
 
 void output_etc1a4(Magick::PixelPacket *p, Buffer &output)
 {
+  rg_etc1::etc1_pack_params params;
+  params.clear();
+
+  for(size_t j = 0; j < 8; j += 4)
+  {
+    for(size_t i = 0; i < 8; i += 4)
+    {
+      uint8_t in_block[4*4*4];
+      uint8_t out_block[8];
+      uint8_t out_alpha[8] = {0,0,0,0,0,0,0,0};
+
+      for(size_t y = 0; y < 4; ++y)
+      {
+        for(size_t x = 0; x < 4; ++x)
+        {
+          Magick::Color c(p[j*8+i+y*4+x]);
+
+          in_block[y*16+x*4+0] = value<8>(c.redQuantum());
+          in_block[y*16+x*4+1] = value<8>(c.greenQuantum());
+          in_block[y*16+x*4+2] = value<8>(c.blueQuantum());
+          in_block[y*16+x*4+3] = 0xFF;
+
+          if(y & 1)
+            out_alpha[2*x+y/2] |= (value<4>(alpha(c)) << 4);
+          else
+            out_alpha[2*x+y/2] |= value<4>(alpha(c));
+        }
+      }
+
+      for(size_t i = 0; i < 8; ++i)
+        output.push_back(out_alpha[i]);
+
+      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
+      for(size_t i = 0; i < 8; ++i)
+        output.push_back(out_block[8-i-1]);
+    }
+  }
 }
 
 void quantize_rgba8888(Magick::Image &img)
@@ -706,11 +756,13 @@ void process_image(Magick::Image img)
       break;
 
     case ETC1:
+      rg_etc1::pack_etc1_block_init();
       output = output_etc1;
       quantize = quantize_etc1;
       break;
 
     case ETC1A4:
+      rg_etc1::pack_etc1_block_init();
       output = output_etc1a4;
       quantize = quantize_etc1a4;
       break;
@@ -895,10 +947,10 @@ void print_usage(const char *prog)
     "      4-bit Alpha\n\n"
 
     "    -c, --etc1\n"
-    "      ETC1 (unsupported)\n\n"
+    "      ETC1\n\n"
 
     "    -d, --etc1a4\n"
-    "      ETC1 with 4-bit Alpha (unsupported)\n\n"
+    "      ETC1 with 4-bit Alpha\n\n"
 
     "  Filter options:\n"
     "    -m bessel     Bessel filter\n"
@@ -1061,18 +1113,6 @@ int main(int argc, char *argv[])
         std::fprintf(stderr, "Invalid option '%c'\n", optopt);
         return EXIT_FAILURE;
     }
-  }
-
-  const char *error_type = nullptr;
-  if(output_format == ETC1)
-    error_type = "etc1";
-  else if(output_format == ETC1A4)
-    error_type = "etc1a4";
-
-  if(error_type)
-  {
-    std::fprintf(stderr, "%s not supported yet\n", error_type);
-    return EXIT_FAILURE;
   }
 
   if(optind == argc)
