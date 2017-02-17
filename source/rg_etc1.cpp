@@ -11,11 +11,10 @@
 // v1.03 - 5/12/13 - Initial public release
 #include "rg_etc1.h"
 
-#include <stdlib.h>
-#include <memory.h>
-#include <assert.h>
-//#include <stdio.h>
-#include <math.h>
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstring>
 
 #if __cplusplus >= 201103L
 #include <cstdint>
@@ -38,14 +37,12 @@ namespace rg_etc1
    const uint32_t cUINT32_MAX = 0xFFFFFFFFU;
    const uint64_t cUINT64_MAX = 0xFFFFFFFFFFFFFFFFULL; //0xFFFFFFFFFFFFFFFFui64;
 
-   template<typename T> inline T minimum(T a, T b) { return (a < b) ? a : b; }
-   template<typename T> inline T minimum(T a, T b, T c) { return minimum(minimum(a, b), c); }
-   template<typename T> inline T maximum(T a, T b) { return (a > b) ? a : b; }
-   template<typename T> inline T maximum(T a, T b, T c) { return maximum(maximum(a, b), c); }
+   template<typename T> inline T minimum(T a, T b, T c) { return std::min(std::min(a, b), c); }
+   template<typename T> inline T maximum(T a, T b, T c) { return std::max(std::max(a, b), c); }
    template<typename T> inline T clamp(T value, T low, T high) { return (value < low) ? low : ((value > high) ? high : value); }
    template<typename T> inline T square(T value) { return value * value; }
-   template<typename T> inline void zero_object(T& obj) { memset((void*)&obj, 0, sizeof(obj)); }
-   template<typename T> inline void zero_this(T* pObj) { memset((void*)pObj, 0, sizeof(*pObj)); }
+   template<typename T> inline void zero_object(T& obj) { std::memset((void*)&obj, 0, sizeof(obj)); }
+   template<typename T> inline void zero_this(T* pObj) { std::memset((void*)pObj, 0, sizeof(*pObj)); }
 
    template<class T, size_t N> T decay_array_to_subtype(T (&a)[N]);
 
@@ -195,10 +192,10 @@ namespace rg_etc1
       static inline parameter_t get_max_comp() { return component_traits::cMax; }
       static inline bool get_comps_are_signed() { return component_traits::cSigned; }
 
-      inline component_t operator[] (uint i) const { RG_ETC1_ASSERT(i < cNumComps); return c[i]; }
-      inline component_t& operator[] (uint i) { RG_ETC1_ASSERT(i < cNumComps); return c[i]; }
+      inline component_t operator[] (uint32_t i) const { RG_ETC1_ASSERT(i < cNumComps); return c[i]; }
+      inline component_t& operator[] (uint32_t i) { RG_ETC1_ASSERT(i < cNumComps); return c[i]; }
 
-      inline color_quad_u8& set_component(uint i, parameter_t f)
+      inline color_quad_u8& set_component(uint32_t i, parameter_t f)
       {
          RG_ETC1_ASSERT(i < cNumComps);
 
@@ -218,14 +215,14 @@ namespace rg_etc1
 
       inline color_quad_u8& clamp(const color_quad_u8& l, const color_quad_u8& h)
       {
-         for (uint i = 0; i < cNumComps; i++)
+         for (uint32_t i = 0; i < cNumComps; i++)
             c[i] = static_cast<component_t>(rg_etc1::clamp<parameter_t>(c[i], l[i], h[i]));
          return *this;
       }
 
       inline color_quad_u8& clamp(parameter_t l, parameter_t h)
       {
-         for (uint i = 0; i < cNumComps; i++)
+         for (uint32_t i = 0; i < cNumComps; i++)
             c[i] = static_cast<component_t>(rg_etc1::clamp<parameter_t>(c[i], l, h));
          return *this;
       }
@@ -242,12 +239,12 @@ namespace rg_etc1
          return static_cast<parameter_t>((13938U * r + 46869U * g + 4729U * b + 32768U) >> 16U);
       }
 
-      inline uint squared_distance_rgb(const color_quad_u8& c) const
+      inline uint32_t squared_distance_rgb(const color_quad_u8& c) const
       {
          return rg_etc1::square(r - c.r) + rg_etc1::square(g - c.g) + rg_etc1::square(b - c.b);
       }
 
-      inline uint squared_distance_rgba(const color_quad_u8& c) const
+      inline uint32_t squared_distance_rgba(const color_quad_u8& c) const
       {
          return rg_etc1::square(r - c.r) + rg_etc1::square(g - c.g) + rg_etc1::square(b - c.b) + rg_etc1::square(a - c.a);
       }
@@ -264,14 +261,14 @@ namespace rg_etc1
 
       color_quad_u8& operator+= (const color_quad_u8& other)
       {
-         for (uint i = 0; i < 4; i++)
+         for (uint32_t i = 0; i < 4; i++)
             c[i] = static_cast<component_t>(clamp(c[i] + other.c[i]));
          return *this;
       }
 
       color_quad_u8& operator-= (const color_quad_u8& other)
       {
-         for (uint i = 0; i < 4; i++)
+         for (uint32_t i = 0; i < 4; i++)
             c[i] = static_cast<component_t>(clamp(c[i] - other.c[i]));
          return *this;
       }
@@ -299,11 +296,11 @@ namespace rg_etc1
       inline vec3F(float s) { m_s[0] = s; m_s[1] = s; m_s[2] = s; }
       inline vec3F(float x, float y, float z) { m_s[0] = x; m_s[1] = y; m_s[2] = z; }
 
-      inline float operator[] (uint i) const { RG_ETC1_ASSERT(i < 3); return m_s[i]; }
+      inline float operator[] (uint32_t i) const { RG_ETC1_ASSERT(i < 3); return m_s[i]; }
 
-      inline vec3F& operator += (const vec3F& other) { for (uint i = 0; i < 3; i++) m_s[i] += other.m_s[i]; return *this; }
+      inline vec3F& operator += (const vec3F& other) { for (uint32_t i = 0; i < 3; i++) m_s[i] += other.m_s[i]; return *this; }
 
-      inline vec3F& operator *= (float s) { for (uint i = 0; i < 3; i++) m_s[i] *= s; return *this; }
+      inline vec3F& operator *= (float s) { for (uint32_t i = 0; i < 3; i++) m_s[i] *= s; return *this; }
    };
 
    enum etc_constants
@@ -523,25 +520,25 @@ namespace rg_etc1
          zero_this(this);
       }
 
-      inline uint get_byte_bits(uint ofs, uint num) const
+      inline uint32_t get_byte_bits(uint32_t ofs, uint32_t num) const
       {
          RG_ETC1_ASSERT((ofs + num) <= 64U);
          RG_ETC1_ASSERT(num && (num <= 8U));
          RG_ETC1_ASSERT((ofs >> 3) == ((ofs + num - 1) >> 3));
-         const uint byte_ofs = 7 - (ofs >> 3);
-         const uint byte_bit_ofs = ofs & 7;
+         const uint32_t byte_ofs = 7 - (ofs >> 3);
+         const uint32_t byte_bit_ofs = ofs & 7;
          return (m_bytes[byte_ofs] >> byte_bit_ofs) & ((1 << num) - 1);
       }
 
-      inline void set_byte_bits(uint ofs, uint num, uint bits)
+      inline void set_byte_bits(uint32_t ofs, uint32_t num, uint32_t bits)
       {
          RG_ETC1_ASSERT((ofs + num) <= 64U);
          RG_ETC1_ASSERT(num && (num < 32U));
          RG_ETC1_ASSERT((ofs >> 3) == ((ofs + num - 1) >> 3));
          RG_ETC1_ASSERT(bits < (1U << num));
-         const uint byte_ofs = 7 - (ofs >> 3);
-         const uint byte_bit_ofs = ofs & 7;
-         const uint mask = (1 << num) - 1;
+         const uint32_t byte_ofs = 7 - (ofs >> 3);
+         const uint32_t byte_bit_ofs = ofs & 7;
+         const uint32_t mask = (1 << num) - 1;
          m_bytes[byte_ofs] &= ~(mask << byte_bit_ofs);
          m_bytes[byte_ofs] |= (bits << byte_bit_ofs);
       }
@@ -567,58 +564,58 @@ namespace rg_etc1
       inline void set_diff_bit(bool diff)
       {
          m_bytes[3] &= ~2;
-         m_bytes[3] |= (static_cast<uint>(diff) << 1);
+         m_bytes[3] |= (static_cast<uint32_t>(diff) << 1);
       }
 
       // Returns intensity modifier table (0-7) used by subblock subblock_id.
       // subblock_id=0 left/top (CW 1), 1=right/bottom (CW 2)
-      inline uint get_inten_table(uint subblock_id) const
+      inline uint32_t get_inten_table(uint32_t subblock_id) const
       {
          RG_ETC1_ASSERT(subblock_id < 2);
-         const uint ofs = subblock_id ? 2 : 5;
+         const uint32_t ofs = subblock_id ? 2 : 5;
          return (m_bytes[3] >> ofs) & 7;
       }
 
       // Sets intensity modifier table (0-7) used by subblock subblock_id (0 or 1)
-      inline void set_inten_table(uint subblock_id, uint t)
+      inline void set_inten_table(uint32_t subblock_id, uint32_t t)
       {
          RG_ETC1_ASSERT(subblock_id < 2);
          RG_ETC1_ASSERT(t < 8);
-         const uint ofs = subblock_id ? 2 : 5;
+         const uint32_t ofs = subblock_id ? 2 : 5;
          m_bytes[3] &= ~(7 << ofs);
          m_bytes[3] |= (t << ofs);
       }
 
       // Returned selector value ranges from 0-3 and is a direct index into g_etc1_inten_tables.
-      inline uint get_selector(uint x, uint y) const
+      inline uint32_t get_selector(uint32_t x, uint32_t y) const
       {
          RG_ETC1_ASSERT((x | y) < 4);
 
-         const uint bit_index = x * 4 + y;
-         const uint byte_bit_ofs = bit_index & 7;
+         const uint32_t bit_index = x * 4 + y;
+         const uint32_t byte_bit_ofs = bit_index & 7;
          const uint8_t *p = &m_bytes[7 - (bit_index >> 3)];
-         const uint lsb = (p[0] >> byte_bit_ofs) & 1;
-         const uint msb = (p[-2] >> byte_bit_ofs) & 1;
-         const uint val = lsb | (msb << 1);
+         const uint32_t lsb = (p[0] >> byte_bit_ofs) & 1;
+         const uint32_t msb = (p[-2] >> byte_bit_ofs) & 1;
+         const uint32_t val = lsb | (msb << 1);
 
          return g_etc1_to_selector_index[val];
       }
 
       // Selector "val" ranges from 0-3 and is a direct index into g_etc1_inten_tables.
-      inline void set_selector(uint x, uint y, uint val)
+      inline void set_selector(uint32_t x, uint32_t y, uint32_t val)
       {
          RG_ETC1_ASSERT((x | y | val) < 4);
-         const uint bit_index = x * 4 + y;
+         const uint32_t bit_index = x * 4 + y;
 
          uint8_t *p = &m_bytes[7 - (bit_index >> 3)];
 
-         const uint byte_bit_ofs = bit_index & 7;
-         const uint mask = 1 << byte_bit_ofs;
+         const uint32_t byte_bit_ofs = bit_index & 7;
+         const uint32_t mask = 1 << byte_bit_ofs;
 
-         const uint etc1_val = g_selector_index_to_etc1[val];
+         const uint32_t etc1_val = g_selector_index_to_etc1[val];
 
-         const uint lsb = etc1_val & 1;
-         const uint msb = etc1_val >> 1;
+         const uint32_t lsb = etc1_val & 1;
+         const uint32_t msb = etc1_val >> 1;
 
          p[0] &= ~mask;
          p[0] |= (lsb << byte_bit_ofs);
@@ -627,7 +624,7 @@ namespace rg_etc1
          p[-2] |= (msb << byte_bit_ofs);
       }
 
-      inline void set_base4_color(uint idx, uint16_t c)
+      inline void set_base4_color(uint32_t idx, uint16_t c)
       {
          if (idx)
          {
@@ -643,9 +640,9 @@ namespace rg_etc1
          }
       }
 
-      inline uint16_t get_base4_color(uint idx) const
+      inline uint16_t get_base4_color(uint32_t idx) const
       {
-         uint r, g, b;
+         uint32_t r, g, b;
          if (idx)
          {
             r = get_byte_bits(cETC1AbsColor4R2BitOffset, 4);
@@ -670,9 +667,9 @@ namespace rg_etc1
 
       inline uint16_t get_base5_color() const
       {
-         const uint r = get_byte_bits(cETC1BaseColor5RBitOffset, 5);
-         const uint g = get_byte_bits(cETC1BaseColor5GBitOffset, 5);
-         const uint b = get_byte_bits(cETC1BaseColor5BBitOffset, 5);
+         const uint32_t r = get_byte_bits(cETC1BaseColor5RBitOffset, 5);
+         const uint32_t g = get_byte_bits(cETC1BaseColor5GBitOffset, 5);
+         const uint32_t b = get_byte_bits(cETC1BaseColor5BBitOffset, 5);
          return static_cast<uint16_t>(b | (g << 5U) | (r << 10U));
       }
 
@@ -685,21 +682,21 @@ namespace rg_etc1
 
       inline uint16_t get_delta3_color() const
       {
-         const uint r = get_byte_bits(cETC1DeltaColor3RBitOffset, 3);
-         const uint g = get_byte_bits(cETC1DeltaColor3GBitOffset, 3);
-         const uint b = get_byte_bits(cETC1DeltaColor3BBitOffset, 3);
+         const uint32_t r = get_byte_bits(cETC1DeltaColor3RBitOffset, 3);
+         const uint32_t g = get_byte_bits(cETC1DeltaColor3GBitOffset, 3);
+         const uint32_t b = get_byte_bits(cETC1DeltaColor3BBitOffset, 3);
          return static_cast<uint16_t>(b | (g << 3U) | (r << 6U));
       }
 
       // Base color 5
-      static uint16_t pack_color5(const color_quad_u8& color, bool scaled, uint bias = 127U);
-      static uint16_t pack_color5(uint r, uint g, uint b, bool scaled, uint bias = 127U);
+      static uint16_t pack_color5(const color_quad_u8& color, bool scaled, uint32_t bias = 127U);
+      static uint16_t pack_color5(uint32_t r, uint32_t g, uint32_t b, bool scaled, uint32_t bias = 127U);
 
-      static color_quad_u8 unpack_color5(uint16_t packed_color5, bool scaled, uint alpha = 255U);
-      static void unpack_color5(uint& r, uint& g, uint& b, uint16_t packed_color, bool scaled);
+      static color_quad_u8 unpack_color5(uint16_t packed_color5, bool scaled, uint32_t alpha = 255U);
+      static void unpack_color5(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color, bool scaled);
 
-      static bool unpack_color5(color_quad_u8& result, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint alpha = 255U);
-      static bool unpack_color5(uint& r, uint& g, uint& b, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint alpha = 255U);
+      static bool unpack_color5(color_quad_u8& result, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint32_t alpha = 255U);
+      static bool unpack_color5(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint32_t alpha = 255U);
 
       // Delta color 3
       // Inputs range from -4 to 3 (cETC1ColorDeltaMin to cETC1ColorDeltaMax)
@@ -709,16 +706,16 @@ namespace rg_etc1
       static void unpack_delta3(int& r, int& g, int& b, uint16_t packed_delta3);
 
       // Abs color 4
-      static uint16_t pack_color4(const color_quad_u8& color, bool scaled, uint bias = 127U);
-      static uint16_t pack_color4(uint r, uint g, uint b, bool scaled, uint bias = 127U);
+      static uint16_t pack_color4(const color_quad_u8& color, bool scaled, uint32_t bias = 127U);
+      static uint16_t pack_color4(uint32_t r, uint32_t g, uint32_t b, bool scaled, uint32_t bias = 127U);
 
-      static color_quad_u8 unpack_color4(uint16_t packed_color4, bool scaled, uint alpha = 255U);
-      static void unpack_color4(uint& r, uint& g, uint& b, uint16_t packed_color4, bool scaled);
+      static color_quad_u8 unpack_color4(uint16_t packed_color4, bool scaled, uint32_t alpha = 255U);
+      static void unpack_color4(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color4, bool scaled);
 
       // subblock colors
-      static void get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint table_idx);
-      static bool get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint16_t packed_delta3, uint table_idx);
-      static void get_abs_subblock_colors(color_quad_u8* pDst, uint16_t packed_color4, uint table_idx);
+      static void get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint32_t table_idx);
+      static bool get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint16_t packed_delta3, uint32_t table_idx);
+      static void get_abs_subblock_colors(color_quad_u8* pDst, uint16_t packed_color4, uint32_t table_idx);
 
       static inline void unscaled_to_scaled_color(color_quad_u8& dst, const color_quad_u8& src, bool color4)
       {
@@ -740,7 +737,7 @@ namespace rg_etc1
 
    // Returns pointer to sorted array.
    template<typename T, typename Q>
-   T* indirect_radix_sort(uint num_indices, T* pIndices0, T* pIndices1, const Q* pKeys, uint key_ofs, uint key_size, bool init_indices)
+   T* indirect_radix_sort(uint32_t num_indices, T* pIndices0, T* pIndices1, const Q* pKeys, uint32_t key_ofs, uint32_t key_size, bool init_indices)
    {
       RG_ETC1_ASSERT((key_ofs >= 0) && (key_ofs < sizeof(T)));
       RG_ETC1_ASSERT((key_size >= 1) && (key_size <= 4));
@@ -749,7 +746,7 @@ namespace rg_etc1
       {
          T* p = pIndices0;
          T* q = pIndices0 + (num_indices >> 1) * 2;
-         uint i;
+         uint32_t i;
          for (i = 0; p != q; p += 2, i += 2)
          {
             p[0] = static_cast<T>(i);
@@ -760,12 +757,12 @@ namespace rg_etc1
             *p = static_cast<T>(i);
       }
 
-      uint hist[256 * 4];
+      uint32_t hist[256 * 4];
 
-      memset(hist, 0, sizeof(hist[0]) * 256 * key_size);
+      std::memset(hist, 0, sizeof(hist[0]) * 256 * key_size);
 
-#define RG_ETC1_GET_KEY(p) (*(const uint*)((const uint8_t*)(pKeys + *(p)) + key_ofs))
-#define RG_ETC1_GET_KEY_FROM_INDEX(i) (*(const uint*)((const uint8_t*)(pKeys + (i)) + key_ofs))
+#define RG_ETC1_GET_KEY(p) (*(const uint32_t*)((const uint8_t*)(pKeys + *(p)) + key_ofs))
+#define RG_ETC1_GET_KEY_FROM_INDEX(i) (*(const uint32_t*)((const uint8_t*)(pKeys + (i)) + key_ofs))
 
       if (key_size == 4)
       {
@@ -773,7 +770,7 @@ namespace rg_etc1
          T* q = pIndices0 + num_indices;
          for ( ; p != q; p++)
          {
-            const uint key = RG_ETC1_GET_KEY(p);
+            const uint32_t key = RG_ETC1_GET_KEY(p);
 
             hist[        key        & 0xFF]++;
             hist[256 + ((key >>  8) & 0xFF)]++;
@@ -787,7 +784,7 @@ namespace rg_etc1
          T* q = pIndices0 + num_indices;
          for ( ; p != q; p++)
          {
-            const uint key = RG_ETC1_GET_KEY(p);
+            const uint32_t key = RG_ETC1_GET_KEY(p);
 
             hist[        key        & 0xFF]++;
             hist[256 + ((key >>  8) & 0xFF)]++;
@@ -801,8 +798,8 @@ namespace rg_etc1
 
          for ( ; p != q; p += 2)
          {
-            const uint key0 = RG_ETC1_GET_KEY(p);
-            const uint key1 = RG_ETC1_GET_KEY(p+1);
+            const uint32_t key0 = RG_ETC1_GET_KEY(p);
+            const uint32_t key1 = RG_ETC1_GET_KEY(p+1);
 
             hist[        key0         & 0xFF]++;
             hist[256 + ((key0 >>  8) & 0xFF)]++;
@@ -813,7 +810,7 @@ namespace rg_etc1
 
          if (num_indices & 1)
          {
-            const uint key = RG_ETC1_GET_KEY(p);
+            const uint32_t key = RG_ETC1_GET_KEY(p);
 
             hist[        key        & 0xFF]++;
             hist[256 + ((key >>  8) & 0xFF)]++;
@@ -830,8 +827,8 @@ namespace rg_etc1
 
          for ( ; p != q; p += 2)
          {
-            const uint key0 = RG_ETC1_GET_KEY(p);
-            const uint key1 = RG_ETC1_GET_KEY(p+1);
+            const uint32_t key0 = RG_ETC1_GET_KEY(p);
+            const uint32_t key1 = RG_ETC1_GET_KEY(p+1);
 
             hist[key0 & 0xFF]++;
             hist[key1 & 0xFF]++;
@@ -839,7 +836,7 @@ namespace rg_etc1
 
          if (num_indices & 1)
          {
-            const uint key = RG_ETC1_GET_KEY(p);
+            const uint32_t key = RG_ETC1_GET_KEY(p);
 
             hist[key & 0xFF]++;
          }
@@ -848,14 +845,14 @@ namespace rg_etc1
       T* pCur = pIndices0;
       T* pNew = pIndices1;
 
-      for (uint pass = 0; pass < key_size; pass++)
+      for (uint32_t pass = 0; pass < key_size; pass++)
       {
-         const uint* pHist = &hist[pass << 8];
+         const uint32_t* pHist = &hist[pass << 8];
 
-         uint offsets[256];
+         uint32_t offsets[256];
 
-         uint cur_ofs = 0;
-         for (uint i = 0; i < 256; i += 2)
+         uint32_t cur_ofs = 0;
+         for (uint32_t i = 0; i < 256; i += 2)
          {
             offsets[i] = cur_ofs;
             cur_ofs += pHist[i];
@@ -864,22 +861,22 @@ namespace rg_etc1
             cur_ofs += pHist[i+1];
          }
 
-         const uint pass_shift = pass << 3;
+         const uint32_t pass_shift = pass << 3;
 
          T* p = pCur;
          T* q = pCur + (num_indices >> 1) * 2;
 
          for ( ; p != q; p += 2)
          {
-            uint index0 = p[0];
-            uint index1 = p[1];
+            uint32_t index0 = p[0];
+            uint32_t index1 = p[1];
 
-            uint c0 = (RG_ETC1_GET_KEY_FROM_INDEX(index0) >> pass_shift) & 0xFF;
-            uint c1 = (RG_ETC1_GET_KEY_FROM_INDEX(index1) >> pass_shift) & 0xFF;
+            uint32_t c0 = (RG_ETC1_GET_KEY_FROM_INDEX(index0) >> pass_shift) & 0xFF;
+            uint32_t c1 = (RG_ETC1_GET_KEY_FROM_INDEX(index1) >> pass_shift) & 0xFF;
 
             if (c0 == c1)
             {
-               uint dst_offset0 = offsets[c0];
+               uint32_t dst_offset0 = offsets[c0];
 
                offsets[c0] = dst_offset0 + 2;
 
@@ -888,8 +885,8 @@ namespace rg_etc1
             }
             else
             {
-               uint dst_offset0 = offsets[c0]++;
-               uint dst_offset1 = offsets[c1]++;
+               uint32_t dst_offset0 = offsets[c0]++;
+               uint32_t dst_offset1 = offsets[c1]++;
 
                pNew[dst_offset0] = static_cast<T>(index0);
                pNew[dst_offset1] = static_cast<T>(index1);
@@ -898,10 +895,10 @@ namespace rg_etc1
 
          if (num_indices & 1)
          {
-            uint index = *p;
-            uint c = (RG_ETC1_GET_KEY_FROM_INDEX(index) >> pass_shift) & 0xFF;
+            uint32_t index = *p;
+            uint32_t c = (RG_ETC1_GET_KEY_FROM_INDEX(index) >> pass_shift) & 0xFF;
 
-            uint dst_offset = offsets[c];
+            uint32_t dst_offset = offsets[c];
             offsets[c] = dst_offset + 1;
 
             pNew[dst_offset] = static_cast<T>(index);
@@ -918,12 +915,12 @@ namespace rg_etc1
 #undef RG_ETC1_GET_KEY
 #undef RG_ETC1_GET_KEY_FROM_INDEX
 
-   uint16_t etc1_block::pack_color5(const color_quad_u8& color, bool scaled, uint bias)
+   uint16_t etc1_block::pack_color5(const color_quad_u8& color, bool scaled, uint32_t bias)
    {
       return pack_color5(color.r, color.g, color.b, scaled, bias);
    }
 
-   uint16_t etc1_block::pack_color5(uint r, uint g, uint b, bool scaled, uint bias)
+   uint16_t etc1_block::pack_color5(uint32_t r, uint32_t g, uint32_t b, bool scaled, uint32_t bias)
    {
       if (scaled)
       {
@@ -932,18 +929,18 @@ namespace rg_etc1
          b = (b * 31U + bias) / 255U;
       }
 
-      r = rg_etc1::minimum(r, 31U);
-      g = rg_etc1::minimum(g, 31U);
-      b = rg_etc1::minimum(b, 31U);
+      r = std::min(r, 31U);
+      g = std::min(g, 31U);
+      b = std::min(b, 31U);
 
       return static_cast<uint16_t>(b | (g << 5U) | (r << 10U));
    }
 
-   color_quad_u8 etc1_block::unpack_color5(uint16_t packed_color5, bool scaled, uint alpha)
+   color_quad_u8 etc1_block::unpack_color5(uint16_t packed_color5, bool scaled, uint32_t alpha)
    {
-      uint b = packed_color5 & 31U;
-      uint g = (packed_color5 >> 5U) & 31U;
-      uint r = (packed_color5 >> 10U) & 31U;
+      uint32_t b = packed_color5 & 31U;
+      uint32_t g = (packed_color5 >> 5U) & 31U;
+      uint32_t r = (packed_color5 >> 10U) & 31U;
 
       if (scaled)
       {
@@ -952,10 +949,10 @@ namespace rg_etc1
          r = (r << 3U) | (r >> 2U);
       }
 
-      return color_quad_u8(cNoClamp, r, g, b, rg_etc1::minimum(alpha, 255U));
+      return color_quad_u8(cNoClamp, r, g, b, std::min(alpha, 255U));
    }
 
-   void etc1_block::unpack_color5(uint& r, uint& g, uint& b, uint16_t packed_color5, bool scaled)
+   void etc1_block::unpack_color5(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color5, bool scaled)
    {
       color_quad_u8 c(unpack_color5(packed_color5, scaled, 0));
       r = c.r;
@@ -963,7 +960,7 @@ namespace rg_etc1
       b = c.b;
    }
 
-   bool etc1_block::unpack_color5(color_quad_u8& result, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint alpha)
+   bool etc1_block::unpack_color5(color_quad_u8& result, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint32_t alpha)
    {
       int dc_r, dc_g, dc_b;
       unpack_delta3(dc_r, dc_g, dc_b, packed_delta3);
@@ -973,7 +970,7 @@ namespace rg_etc1
       int r = ((packed_color5 >> 10U) & 31U) + dc_r;
 
       bool success = true;
-      if (static_cast<uint>(r | g | b) > 31U)
+      if (static_cast<uint32_t>(r | g | b) > 31U)
       {
          success = false;
          r = rg_etc1::clamp<int>(r, 0, 31);
@@ -988,11 +985,11 @@ namespace rg_etc1
          r = (r << 3U) | (r >> 2U);
       }
 
-      result.set_noclamp_rgba(r, g, b, rg_etc1::minimum(alpha, 255U));
+      result.set_noclamp_rgba(r, g, b, std::min(alpha, 255U));
       return success;
    }
 
-   bool etc1_block::unpack_color5(uint& r, uint& g, uint& b, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint alpha)
+   bool etc1_block::unpack_color5(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color5, uint16_t packed_delta3, bool scaled, uint32_t alpha)
    {
       color_quad_u8 result;
       const bool success = unpack_color5(result, packed_color5, packed_delta3, scaled, alpha);
@@ -1023,12 +1020,12 @@ namespace rg_etc1
       if (b >= 4) b -= 8;
    }
 
-   uint16_t etc1_block::pack_color4(const color_quad_u8& color, bool scaled, uint bias)
+   uint16_t etc1_block::pack_color4(const color_quad_u8& color, bool scaled, uint32_t bias)
    {
       return pack_color4(color.r, color.g, color.b, scaled, bias);
    }
 
-   uint16_t etc1_block::pack_color4(uint r, uint g, uint b, bool scaled, uint bias)
+   uint16_t etc1_block::pack_color4(uint32_t r, uint32_t g, uint32_t b, bool scaled, uint32_t bias)
    {
       if (scaled)
       {
@@ -1037,18 +1034,18 @@ namespace rg_etc1
          b = (b * 15U + bias) / 255U;
       }
 
-      r = rg_etc1::minimum(r, 15U);
-      g = rg_etc1::minimum(g, 15U);
-      b = rg_etc1::minimum(b, 15U);
+      r = std::min(r, 15U);
+      g = std::min(g, 15U);
+      b = std::min(b, 15U);
 
       return static_cast<uint16_t>(b | (g << 4U) | (r << 8U));
    }
 
-   color_quad_u8 etc1_block::unpack_color4(uint16_t packed_color4, bool scaled, uint alpha)
+   color_quad_u8 etc1_block::unpack_color4(uint16_t packed_color4, bool scaled, uint32_t alpha)
    {
-      uint b = packed_color4 & 15U;
-      uint g = (packed_color4 >> 4U) & 15U;
-      uint r = (packed_color4 >> 8U) & 15U;
+      uint32_t b = packed_color4 & 15U;
+      uint32_t g = (packed_color4 >> 4U) & 15U;
+      uint32_t r = (packed_color4 >> 8U) & 15U;
 
       if (scaled)
       {
@@ -1057,10 +1054,10 @@ namespace rg_etc1
          r = (r << 4U) | r;
       }
 
-      return color_quad_u8(cNoClamp, r, g, b, rg_etc1::minimum(alpha, 255U));
+      return color_quad_u8(cNoClamp, r, g, b, std::min(alpha, 255U));
    }
 
-   void etc1_block::unpack_color4(uint& r, uint& g, uint& b, uint16_t packed_color4, bool scaled)
+   void etc1_block::unpack_color4(uint32_t& r, uint32_t& g, uint32_t& b, uint16_t packed_color4, bool scaled)
    {
       color_quad_u8 c(unpack_color4(packed_color4, scaled, 0));
       r = c.r;
@@ -1068,12 +1065,12 @@ namespace rg_etc1
       b = c.b;
    }
 
-   void etc1_block::get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint table_idx)
+   void etc1_block::get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint32_t table_idx)
    {
       RG_ETC1_ASSERT(table_idx < cETC1IntenModifierValues);
       const int *pInten_modifer_table = &g_etc1_inten_tables[table_idx][0];
 
-      uint r, g, b;
+      uint32_t r, g, b;
       unpack_color5(r, g, b, packed_color5, true);
 
       const int ir = static_cast<int>(r), ig = static_cast<int>(g), ib = static_cast<int>(b);
@@ -1091,12 +1088,12 @@ namespace rg_etc1
       pDst[3].set(ir + y3, ig + y3, ib + y3);
    }
 
-   bool etc1_block::get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint16_t packed_delta3, uint table_idx)
+   bool etc1_block::get_diff_subblock_colors(color_quad_u8* pDst, uint16_t packed_color5, uint16_t packed_delta3, uint32_t table_idx)
    {
       RG_ETC1_ASSERT(table_idx < cETC1IntenModifierValues);
       const int *pInten_modifer_table = &g_etc1_inten_tables[table_idx][0];
 
-      uint r, g, b;
+      uint32_t r, g, b;
       bool success = unpack_color5(r, g, b, packed_color5, packed_delta3, true);
 
       const int ir = static_cast<int>(r), ig = static_cast<int>(g), ib = static_cast<int>(b);
@@ -1116,12 +1113,12 @@ namespace rg_etc1
       return success;
    }
 
-   void etc1_block::get_abs_subblock_colors(color_quad_u8* pDst, uint16_t packed_color4, uint table_idx)
+   void etc1_block::get_abs_subblock_colors(color_quad_u8* pDst, uint16_t packed_color4, uint32_t table_idx)
    {
       RG_ETC1_ASSERT(table_idx < cETC1IntenModifierValues);
       const int *pInten_modifer_table = &g_etc1_inten_tables[table_idx][0];
 
-      uint r, g, b;
+      uint32_t r, g, b;
       unpack_color4(r, g, b, packed_color4, true);
 
       const int ir = static_cast<int>(r), ig = static_cast<int>(g), ib = static_cast<int>(b);
@@ -1146,8 +1143,8 @@ namespace rg_etc1
 
       const bool diff_flag = block.get_diff_bit();
       const bool flip_flag = block.get_flip_bit();
-      const uint table_index0 = block.get_inten_table(0);
-      const uint table_index1 = block.get_inten_table(1);
+      const uint32_t table_index0 = block.get_inten_table(0);
+      const uint32_t table_index1 = block.get_inten_table(1);
 
       color_quad_u8 subblock_colors0[4];
       color_quad_u8 subblock_colors1[4];
@@ -1175,7 +1172,7 @@ namespace rg_etc1
       {
          if (flip_flag)
          {
-            for (uint y = 0; y < 2; y++)
+            for (uint32_t y = 0; y < 2; y++)
             {
                pDst[0].set_rgb(subblock_colors0[block.get_selector(0, y)]);
                pDst[1].set_rgb(subblock_colors0[block.get_selector(1, y)]);
@@ -1184,7 +1181,7 @@ namespace rg_etc1
                pDst += 4;
             }
 
-            for (uint y = 2; y < 4; y++)
+            for (uint32_t y = 2; y < 4; y++)
             {
                pDst[0].set_rgb(subblock_colors1[block.get_selector(0, y)]);
                pDst[1].set_rgb(subblock_colors1[block.get_selector(1, y)]);
@@ -1195,7 +1192,7 @@ namespace rg_etc1
          }
          else
          {
-            for (uint y = 0; y < 4; y++)
+            for (uint32_t y = 0; y < 4; y++)
             {
                pDst[0].set_rgb(subblock_colors0[block.get_selector(0, y)]);
                pDst[1].set_rgb(subblock_colors0[block.get_selector(1, y)]);
@@ -1213,7 +1210,7 @@ namespace rg_etc1
             // 0000
             // 1111
             // 1111
-            for (uint y = 0; y < 2; y++)
+            for (uint32_t y = 0; y < 2; y++)
             {
                pDst[0] = subblock_colors0[block.get_selector(0, y)];
                pDst[1] = subblock_colors0[block.get_selector(1, y)];
@@ -1222,7 +1219,7 @@ namespace rg_etc1
                pDst += 4;
             }
 
-            for (uint y = 2; y < 4; y++)
+            for (uint32_t y = 2; y < 4; y++)
             {
                pDst[0] = subblock_colors1[block.get_selector(0, y)];
                pDst[1] = subblock_colors1[block.get_selector(1, y)];
@@ -1237,7 +1234,7 @@ namespace rg_etc1
             // 0011
             // 0011
             // 0011
-            for (uint y = 0; y < 4; y++)
+            for (uint32_t y = 0; y < 4; y++)
             {
                pDst[0] = subblock_colors0[block.get_selector(0, y)];
                pDst[1] = subblock_colors0[block.get_selector(1, y)];
@@ -1260,14 +1257,14 @@ namespace rg_etc1
       {
       }
 
-      inline etc1_solution_coordinates(uint r, uint g, uint b, uint inten_table, bool color4) :
+      inline etc1_solution_coordinates(uint32_t r, uint32_t g, uint32_t b, uint32_t inten_table, bool color4) :
       m_unscaled_color(r, g, b, 255),
          m_inten_table(inten_table),
          m_color4(color4)
       {
       }
 
-      inline etc1_solution_coordinates(const color_quad_u8& c, uint inten_table, bool color4) :
+      inline etc1_solution_coordinates(const color_quad_u8& c, uint32_t inten_table, bool color4) :
       m_unscaled_color(c),
          m_inten_table(inten_table),
          m_color4(color4)
@@ -1335,7 +1332,7 @@ namespace rg_etc1
       }
 
       color_quad_u8 m_unscaled_color;
-      uint m_inten_table;
+      uint32_t m_inten_table;
       bool m_color4;
    };
 
@@ -1391,12 +1388,12 @@ namespace rg_etc1
             m_constrain_against_base_color5 = false;
          }
 
-         uint m_num_src_pixels;
+         uint32_t m_num_src_pixels;
          const color_quad_u8* m_pSrc_pixels;
 
          bool m_use_color4;
          const int* m_pScan_deltas;
-         uint m_scan_delta_size;
+         uint32_t m_scan_delta_size;
 
          color_quad_u8 m_base_color5;
          bool m_constrain_against_base_color5;
@@ -1406,8 +1403,8 @@ namespace rg_etc1
       {
          uint64_t m_error;
          color_quad_u8 m_block_color_unscaled;
-         uint m_block_inten_table;
-         uint m_n;
+         uint32_t m_block_inten_table;
+         uint32_t m_n;
          uint8_t* m_pSelectors;
          bool m_block_color4;
 
@@ -1418,7 +1415,7 @@ namespace rg_etc1
             m_block_inten_table = rhs.m_block_inten_table;
             m_error = rhs.m_error;
             RG_ETC1_ASSERT(m_n == rhs.m_n);
-            memcpy(m_pSelectors, rhs.m_pSelectors, rhs.m_n);
+            std::memcpy(m_pSelectors, rhs.m_pSelectors, rhs.m_n);
             return *this;
          }
       };
@@ -1471,7 +1468,7 @@ namespace rg_etc1
 
    bool etc1_optimizer::compute()
    {
-      const uint n = m_pParams->m_num_src_pixels;
+      const uint32_t n = m_pParams->m_num_src_pixels;
       const int scan_delta_size = m_pParams->m_scan_delta_size;
 
       // Scan through a subset of the 3D lattice centered around the avg block color trying each 3D (555 or 444) lattice point as a potential block color.
@@ -1523,17 +1520,17 @@ namespace rg_etc1
                // Unfortunately, optimal_block_color must then be quantized to 555 or 444 so it's not always possible to improve matters using this formula.
                // Also, the above formula is for unclamped intensity deltas. The actual implementation takes into account clamping.
 
-               const uint max_refinement_trials = (m_pParams->m_quality == cLowQuality) ? 2 : (((xd | yd | zd) == 0) ? 4 : 2);
-               for (uint refinement_trial = 0; refinement_trial < max_refinement_trials; refinement_trial++)
+               const uint32_t max_refinement_trials = (m_pParams->m_quality == cLowQuality) ? 2 : (((xd | yd | zd) == 0) ? 4 : 2);
+               for (uint32_t refinement_trial = 0; refinement_trial < max_refinement_trials; refinement_trial++)
                {
                   const uint8_t* pSelectors = m_best_solution.m_selectors;
                   const int* pInten_table = g_etc1_inten_tables[m_best_solution.m_coords.m_inten_table];
 
                   int delta_sum_r = 0, delta_sum_g = 0, delta_sum_b = 0;
                   const color_quad_u8 base_color(m_best_solution.m_coords.get_scaled_color());
-                  for (uint r = 0; r < n; r++)
+                  for (uint32_t r = 0; r < n; r++)
                   {
-                     const uint s = *pSelectors++;
+                     const uint32_t s = *pSelectors++;
                      const int yd = pInten_table[s];
                      // Compute actual delta being applied to each pixel, taking into account clamping.
                      delta_sum_r += rg_etc1::clamp<int>(base_color.r + yd, 0, 255) - base_color.r;
@@ -1545,9 +1542,9 @@ namespace rg_etc1
                   const float avg_delta_r_f = static_cast<float>(delta_sum_r) / n;
                   const float avg_delta_g_f = static_cast<float>(delta_sum_g) / n;
                   const float avg_delta_b_f = static_cast<float>(delta_sum_b) / n;
-                  const int br1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[0] - avg_delta_r_f) * m_limit / 255.0f + .5f), 0, m_limit);
-                  const int bg1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[1] - avg_delta_g_f) * m_limit / 255.0f + .5f), 0, m_limit);
-                  const int bb1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[2] - avg_delta_b_f) * m_limit / 255.0f + .5f), 0, m_limit);
+                  const int br1 = rg_etc1::clamp<int>(static_cast<uint32_t>((m_avg_color[0] - avg_delta_r_f) * m_limit / 255.0f + .5f), 0, m_limit);
+                  const int bg1 = rg_etc1::clamp<int>(static_cast<uint32_t>((m_avg_color[1] - avg_delta_g_f) * m_limit / 255.0f + .5f), 0, m_limit);
+                  const int bb1 = rg_etc1::clamp<int>(static_cast<uint32_t>((m_avg_color[2] - avg_delta_b_f) * m_limit / 255.0f + .5f), 0, m_limit);
 
                   bool skip = false;
 
@@ -1594,7 +1591,7 @@ namespace rg_etc1
 
          const color_quad_u8* pSrc_pixels = m_pParams->m_pSrc_pixels;
          uint64_t actual_error = 0;
-         for (uint i = 0; i < n; i++)
+         for (uint32_t i = 0; i < n; i++)
             actual_error += pSrc_pixels[i].squared_distance_rgb(block_colors[pSelectors[i]]);
 
          RG_ETC1_ASSERT(actual_error == m_best_solution.m_error);
@@ -1607,7 +1604,7 @@ namespace rg_etc1
       m_pResult->m_block_color4 = m_best_solution.m_coords.m_color4;
 
       m_pResult->m_block_inten_table = m_best_solution.m_coords.m_inten_table;
-      memcpy(m_pResult->m_pSelectors, pSelectors, n);
+      std::memcpy(m_pResult->m_pSelectors, pSelectors, n);
       m_pResult->m_n = n;
 
       return true;
@@ -1621,13 +1618,13 @@ namespace rg_etc1
       m_pParams = &p;
       m_pResult = &r;
 
-      const uint n = 8;
+      const uint32_t n = 8;
 
       m_limit = m_pParams->m_use_color4 ? 15 : 31;
 
       vec3F avg_color(0.0f);
 
-      for (uint i = 0; i < n; i++)
+      for (uint32_t i = 0; i < n; i++)
       {
          const color_quad_u8& c = m_pParams->m_pSrc_pixels[i];
          const vec3F fc(c.r, c.g, c.b);
@@ -1640,9 +1637,9 @@ namespace rg_etc1
       avg_color *= (1.0f / static_cast<float>(n));
       m_avg_color = avg_color;
 
-      m_br = rg_etc1::clamp<int>(static_cast<uint>(m_avg_color[0] * m_limit / 255.0f + .5f), 0, m_limit);
-      m_bg = rg_etc1::clamp<int>(static_cast<uint>(m_avg_color[1] * m_limit / 255.0f + .5f), 0, m_limit);
-      m_bb = rg_etc1::clamp<int>(static_cast<uint>(m_avg_color[2] * m_limit / 255.0f + .5f), 0, m_limit);
+      m_br = rg_etc1::clamp<int>(static_cast<uint32_t>(m_avg_color[0] * m_limit / 255.0f + .5f), 0, m_limit);
+      m_bg = rg_etc1::clamp<int>(static_cast<uint32_t>(m_avg_color[1] * m_limit / 255.0f + .5f), 0, m_limit);
+      m_bb = rg_etc1::clamp<int>(static_cast<uint32_t>(m_avg_color[2] * m_limit / 255.0f + .5f), 0, m_limit);
 
       if (m_pParams->m_quality <= cMediumQuality)
       {
@@ -1651,7 +1648,7 @@ namespace rg_etc1
          if (m_pSorted_luma_indices == m_sorted_luma[0])
             m_pSorted_luma = m_sorted_luma[1];
 
-         for (uint i = 0; i < n; i++)
+         for (uint32_t i = 0; i < n; i++)
             m_pSorted_luma[i] = m_luma[m_pSorted_luma_indices[i]];
       }
 
@@ -1676,16 +1673,16 @@ namespace rg_etc1
 
       const color_quad_u8 base_color(coords.get_scaled_color());
 
-      const uint n = 8;
+      const uint32_t n = 8;
 
       trial_solution.m_error = cUINT64_MAX;
 
-      for (uint inten_table = 0; inten_table < cETC1IntenModifierValues; inten_table++)
+      for (uint32_t inten_table = 0; inten_table < cETC1IntenModifierValues; inten_table++)
       {
          const int* pInten_table = g_etc1_inten_tables[inten_table];
 
          color_quad_u8 block_colors[4];
-         for (uint s = 0; s < 4; s++)
+         for (uint32_t s = 0; s < 4; s++)
          {
             const int yd = pInten_table[s];
             block_colors[s].set(base_color.r + yd, base_color.g + yd, base_color.b + yd, 0);
@@ -1694,14 +1691,14 @@ namespace rg_etc1
          uint64_t total_error = 0;
 
          const color_quad_u8* pSrc_pixels = m_pParams->m_pSrc_pixels;
-         for (uint c = 0; c < n; c++)
+         for (uint32_t c = 0; c < n; c++)
          {
             const color_quad_u8& src_pixel = *pSrc_pixels++;
 
-            uint best_selector_index = 0;
-            uint best_error = rg_etc1::square(src_pixel.r - block_colors[0].r) + rg_etc1::square(src_pixel.g - block_colors[0].g) + rg_etc1::square(src_pixel.b - block_colors[0].b);
+            uint32_t best_selector_index = 0;
+            uint32_t best_error = rg_etc1::square(src_pixel.r - block_colors[0].r) + rg_etc1::square(src_pixel.g - block_colors[0].g) + rg_etc1::square(src_pixel.b - block_colors[0].b);
 
-            uint trial_error = rg_etc1::square(src_pixel.r - block_colors[1].r) + rg_etc1::square(src_pixel.g - block_colors[1].g) + rg_etc1::square(src_pixel.b - block_colors[1].b);
+            uint32_t trial_error = rg_etc1::square(src_pixel.r - block_colors[1].r) + rg_etc1::square(src_pixel.g - block_colors[1].g) + rg_etc1::square(src_pixel.b - block_colors[1].b);
             if (trial_error < best_error)
             {
                best_error = trial_error;
@@ -1733,7 +1730,7 @@ namespace rg_etc1
          {
             trial_solution.m_error = total_error;
             trial_solution.m_coords.m_inten_table = inten_table;
-            memcpy(trial_solution.m_selectors, m_temp_selectors, 8);
+            std::memcpy(trial_solution.m_selectors, m_temp_selectors, 8);
             trial_solution.m_valid = true;
          }
       }
@@ -1770,7 +1767,7 @@ namespace rg_etc1
 
       const color_quad_u8 base_color(coords.get_scaled_color());
 
-      const uint n = 8;
+      const uint32_t n = 8;
 
       trial_solution.m_error = cUINT64_MAX;
 
@@ -1778,9 +1775,9 @@ namespace rg_etc1
       {
          const int* pInten_table = g_etc1_inten_tables[inten_table];
 
-         uint block_inten[4];
+         uint32_t block_inten[4];
          color_quad_u8 block_colors[4];
-         for (uint s = 0; s < 4; s++)
+         for (uint32_t s = 0; s < 4; s++)
          {
             const int yd = pInten_table[s];
             color_quad_u8 block_color(base_color.r + yd, base_color.g + yd, base_color.b + yd, 0);
@@ -1792,7 +1789,7 @@ namespace rg_etc1
          // The inputs colors have been presorted along the projection onto this axis, and ETC1 block colors are always ordered along the intensity axis, so this classification is fast.
          // 0   1   2   3
          //   01  12  23
-         const uint block_inten_midpoints[3] = { block_inten[0] + block_inten[1], block_inten[1] + block_inten[2], block_inten[2] + block_inten[3] };
+         const uint32_t block_inten_midpoints[3] = { block_inten[0] + block_inten[1], block_inten[1] + block_inten[2], block_inten[2] + block_inten[3] };
 
          uint64_t total_error = 0;
          const color_quad_u8* pSrc_pixels = m_pParams->m_pSrc_pixels;
@@ -1800,47 +1797,47 @@ namespace rg_etc1
          {
             if (block_inten[0] > m_pSorted_luma[n - 1])
             {
-               const uint min_error = labs(block_inten[0] - m_pSorted_luma[n - 1]);
+               const uint32_t min_error = std::abs(block_inten[0] - m_pSorted_luma[n - 1]);
                if (min_error >= trial_solution.m_error)
                   continue;
             }
 
-            memset(&m_temp_selectors[0], 0, n);
+            std::memset(&m_temp_selectors[0], 0, n);
 
-            for (uint c = 0; c < n; c++)
+            for (uint32_t c = 0; c < n; c++)
                total_error += block_colors[0].squared_distance_rgb(pSrc_pixels[c]);
          }
          else if ((m_pSorted_luma[0] * 2) >= block_inten_midpoints[2])
          {
             if (m_pSorted_luma[0] > block_inten[3])
             {
-               const uint min_error = labs(m_pSorted_luma[0] - block_inten[3]);
+               const uint32_t min_error = std::abs(m_pSorted_luma[0] - block_inten[3]);
                if (min_error >= trial_solution.m_error)
                   continue;
             }
 
-            memset(&m_temp_selectors[0], 3, n);
+            std::memset(&m_temp_selectors[0], 3, n);
 
-            for (uint c = 0; c < n; c++)
+            for (uint32_t c = 0; c < n; c++)
                total_error += block_colors[3].squared_distance_rgb(pSrc_pixels[c]);
          }
          else
          {
-            uint cur_selector = 0, c;
+            uint32_t cur_selector = 0, c;
             for (c = 0; c < n; c++)
             {
-               const uint y = m_pSorted_luma[c];
+               const uint32_t y = m_pSorted_luma[c];
                while ((y * 2) >= block_inten_midpoints[cur_selector])
                   if (++cur_selector > 2)
                      goto done;
-               const uint sorted_pixel_index = m_pSorted_luma_indices[c];
+               const uint32_t sorted_pixel_index = m_pSorted_luma_indices[c];
                m_temp_selectors[sorted_pixel_index] = static_cast<uint8_t>(cur_selector);
                total_error += block_colors[cur_selector].squared_distance_rgb(pSrc_pixels[sorted_pixel_index]);
             }
 done:
             while (c < n)
             {
-               const uint sorted_pixel_index = m_pSorted_luma_indices[c];
+               const uint32_t sorted_pixel_index = m_pSorted_luma_indices[c];
                m_temp_selectors[sorted_pixel_index] = 3;
                total_error += block_colors[3].squared_distance_rgb(pSrc_pixels[sorted_pixel_index]);
                ++c;
@@ -1851,7 +1848,7 @@ done:
          {
             trial_solution.m_error = total_error;
             trial_solution.m_coords.m_inten_table = inten_table;
-            memcpy(trial_solution.m_selectors, m_temp_selectors, n);
+            std::memcpy(trial_solution.m_selectors, m_temp_selectors, n);
             trial_solution.m_valid = true;
             if (!total_error)
                break;
@@ -1873,7 +1870,7 @@ done:
       return success;
    }
 
-   static uint etc1_decode_value(uint diff, uint inten, uint selector, uint packed_c)
+   static uint32_t etc1_decode_value(uint32_t diff, uint32_t inten, uint32_t selector, uint32_t packed_c)
    {
       RG_ETC1_ASSERT((diff < 2) && (inten < 8) && (selector < 4) && (packed_c < (diff ? 32 : 16)));
       int c;
@@ -1890,22 +1887,22 @@ done:
 
    void pack_etc1_block_init()
    {
-      for (uint diff = 0; diff < 2; diff++)
+      for (uint32_t diff = 0; diff < 2; diff++)
       {
-         const uint limit = diff ? 32 : 16;
+         const uint32_t limit = diff ? 32 : 16;
 
-         for (uint inten = 0; inten < 8; inten++)
+         for (uint32_t inten = 0; inten < 8; inten++)
          {
-            for (uint selector = 0; selector < 4; selector++)
+            for (uint32_t selector = 0; selector < 4; selector++)
             {
-               const uint inverse_table_index = diff + (inten << 1) + (selector << 4);
-               for (uint color = 0; color < 256; color++)
+               const uint32_t inverse_table_index = diff + (inten << 1) + (selector << 4);
+               for (uint32_t color = 0; color < 256; color++)
                {
-                  uint best_error = cUINT32_MAX, best_packed_c = 0;
-                  for (uint packed_c = 0; packed_c < limit; packed_c++)
+                  uint32_t best_error = cUINT32_MAX, best_packed_c = 0;
+                  for (uint32_t packed_c = 0; packed_c < limit; packed_c++)
                   {
                      int v = etc1_decode_value(diff, inten, selector, packed_c);
-                     uint err = labs(v - static_cast<int>(color));
+                     uint32_t err = std::abs(v - static_cast<int>(color));
                      if (err < best_error)
                      {
                         best_error = err;
@@ -1921,7 +1918,7 @@ done:
          }
       }
 
-      uint expand5[32];
+      uint32_t expand5[32];
       for(int i = 0; i < 32; i++)
          expand5[i] = (i << 3) | (i >> 2);
 
@@ -1938,15 +1935,15 @@ done:
    {
       RG_ETC1_ASSERT(g_etc1_inverse_lookup[0][255]);
 
-      static uint s_next_comp[4] = { 1, 2, 0, 1 };
+      static uint32_t s_next_comp[4] = { 1, 2, 0, 1 };
 
-      uint best_error = cUINT32_MAX, best_i = 0;
+      uint32_t best_error = cUINT32_MAX, best_i = 0;
       int best_x = 0, best_packed_c1 = 0, best_packed_c2 = 0;
 
       // For each possible 8-bit value, there is a precomputed list of diff/inten/selector configurations that allow that 8-bit value to be encoded with no error.
-      for (uint i = 0; i < 3; i++)
+      for (uint32_t i = 0; i < 3; i++)
       {
-         const uint c1 = pColor[s_next_comp[i]], c2 = pColor[s_next_comp[i + 1]];
+         const uint32_t c1 = pColor[s_next_comp[i]], c2 = pColor[s_next_comp[i + 1]];
 
          const int delta_range = 1;
          for (int delta = -delta_range; delta <= delta_range; delta++)
@@ -1963,20 +1960,20 @@ done:
 
             do
             {
-               const uint x = *pTable++;
+               const uint32_t x = *pTable++;
 
 #ifdef RG_ETC1_BUILD_DEBUG
-               const uint diff = x & 1;
-               const uint inten = (x >> 1) & 7;
-               const uint selector = (x >> 4) & 3;
-               const uint p0 = (x >> 8) & 255;
-               RG_ETC1_ASSERT(etc1_decode_value(diff, inten, selector, p0) == (uint)c_plus_delta);
+               const uint32_t diff = x & 1;
+               const uint32_t inten = (x >> 1) & 7;
+               const uint32_t selector = (x >> 4) & 3;
+               const uint32_t p0 = (x >> 8) & 255;
+               RG_ETC1_ASSERT(etc1_decode_value(diff, inten, selector, p0) == (uint32_t)c_plus_delta);
 #endif
 
                const uint16_t* pInverse_table = g_etc1_inverse_lookup[x & 0xFF];
                uint16_t p1 = pInverse_table[c1];
                uint16_t p2 = pInverse_table[c2];
-               const uint trial_error = rg_etc1::square(c_plus_delta - pColor[i]) + rg_etc1::square(p1 >> 8) + rg_etc1::square(p2 >> 8);
+               const uint32_t trial_error = rg_etc1::square(c_plus_delta - pColor[i]) + rg_etc1::square(p1 >> 8) + rg_etc1::square(p2 >> 8);
                if (trial_error < best_error)
                {
                   best_error = trial_error;
@@ -1992,18 +1989,18 @@ done:
       }
 found_perfect_match:
 
-      const uint diff = best_x & 1;
-      const uint inten = (best_x >> 1) & 7;
+      const uint32_t diff = best_x & 1;
+      const uint32_t inten = (best_x >> 1) & 7;
 
       block.m_bytes[3] = static_cast<uint8_t>(((inten | (inten << 3)) << 2) | (diff << 1));
 
-      const uint etc1_selector = g_selector_index_to_etc1[(best_x >> 4) & 3];
+      const uint32_t etc1_selector = g_selector_index_to_etc1[(best_x >> 4) & 3];
       block.m_bytes[4] = (etc1_selector & 2) ? 0xFF : 0;
       block.m_bytes[5] = (etc1_selector & 2) ? 0xFF : 0;
       block.m_bytes[6] = (etc1_selector & 1) ? 0xFF : 0;
       block.m_bytes[7] = (etc1_selector & 1) ? 0xFF : 0;
 
-      const uint best_packed_c0 = (best_x >> 8) & 255;
+      const uint32_t best_packed_c0 = (best_x >> 8) & 255;
       if (diff)
       {
          block.m_bytes[best_i] = static_cast<uint8_t>(best_packed_c0 << 3);
@@ -2020,23 +2017,23 @@ found_perfect_match:
       return best_error;
    }
 
-   static uint pack_etc1_block_solid_color_constrained(
+   static uint32_t pack_etc1_block_solid_color_constrained(
       etc1_optimizer::results& results,
-      uint num_colors, const uint8_t* pColor,
+      uint32_t num_colors, const uint8_t* pColor,
       bool use_diff,
       const color_quad_u8* pBase_color5_unscaled)
    {
       RG_ETC1_ASSERT(g_etc1_inverse_lookup[0][255]);
 
-      static uint s_next_comp[4] = { 1, 2, 0, 1 };
+      static uint32_t s_next_comp[4] = { 1, 2, 0, 1 };
 
-      uint best_error = cUINT32_MAX, best_i = 0;
+      uint32_t best_error = cUINT32_MAX, best_i = 0;
       int best_x = 0, best_packed_c1 = 0, best_packed_c2 = 0;
 
       // For each possible 8-bit value, there is a precomputed list of diff/inten/selector configurations that allow that 8-bit value to be encoded with no error.
-      for (uint i = 0; i < 3; i++)
+      for (uint32_t i = 0; i < 3; i++)
       {
-         const uint c1 = pColor[s_next_comp[i]], c2 = pColor[s_next_comp[i + 1]];
+         const uint32_t c1 = pColor[s_next_comp[i]], c2 = pColor[s_next_comp[i + 1]];
 
          const int delta_range = 1;
          for (int delta = -delta_range; delta <= delta_range; delta++)
@@ -2053,9 +2050,9 @@ found_perfect_match:
 
             do
             {
-               const uint x = *pTable++;
-               const uint diff = x & 1;
-               if (static_cast<uint>(use_diff) != diff)
+               const uint32_t x = *pTable++;
+               const uint32_t diff = x & 1;
+               if (static_cast<uint32_t>(use_diff) != diff)
                {
                   if (*pTable == 0xFFFF)
                      break;
@@ -2076,10 +2073,10 @@ found_perfect_match:
 
 #ifdef RG_ETC1_BUILD_DEBUG
                {
-                  const uint inten = (x >> 1) & 7;
-                  const uint selector = (x >> 4) & 3;
-                  const uint p0 = (x >> 8) & 255;
-                  RG_ETC1_ASSERT(etc1_decode_value(diff, inten, selector, p0) == (uint)c_plus_delta);
+                  const uint32_t inten = (x >> 1) & 7;
+                  const uint32_t selector = (x >> 4) & 3;
+                  const uint32_t p0 = (x >> 8) & 255;
+                  RG_ETC1_ASSERT(etc1_decode_value(diff, inten, selector, p0) == (uint32_t)c_plus_delta);
                }
 #endif
 
@@ -2099,7 +2096,7 @@ found_perfect_match:
                   }
                }
 
-               const uint trial_error = rg_etc1::square(c_plus_delta - pColor[i]) + rg_etc1::square(p1 >> 8) + rg_etc1::square(p2 >> 8);
+               const uint32_t trial_error = rg_etc1::square(c_plus_delta - pColor[i]) + rg_etc1::square(p1 >> 8) + rg_etc1::square(p2 >> 8);
                if (trial_error < best_error)
                {
                   best_error = trial_error;
@@ -2123,9 +2120,9 @@ found_perfect_match:
       results.m_n = num_colors;
       results.m_block_color4 = !(best_x & 1);
       results.m_block_inten_table = (best_x >> 1) & 7;
-      memset(results.m_pSelectors, (best_x >> 4) & 3, num_colors);
+      std::memset(results.m_pSelectors, (best_x >> 4) & 3, num_colors);
 
-      const uint best_packed_c0 = (best_x >> 8) & 255;
+      const uint32_t best_packed_c0 = (best_x >> 8) & 255;
       results.m_block_color_unscaled[best_i] = static_cast<uint8_t>(best_packed_c0);
       results.m_block_color_unscaled[s_next_comp[best_i]] = static_cast<uint8_t>(best_packed_c1);
       results.m_block_color_unscaled[s_next_comp[best_i + 1]] = static_cast<uint8_t>(best_packed_c2);
@@ -2140,7 +2137,7 @@ found_perfect_match:
       int err[8],*ep1 = err,*ep2 = err+4;
       uint8_t *quant = g_quant5_tab+8;
 
-      memset(dest, 0xFF, sizeof(color_quad_u8)*16);
+      std::memset(dest, 0xFF, sizeof(color_quad_u8)*16);
 
       // process channels seperately
       for(int ch=0;ch<3;ch++)
@@ -2150,7 +2147,7 @@ found_perfect_match:
 
          bp += ch; dp += ch;
 
-         memset(err,0, sizeof(err));
+         std::memset(err,0, sizeof(err));
          for(int y = 0; y < 4; y++)
          {
             // pixel 0
@@ -2184,7 +2181,7 @@ found_perfect_match:
 
 #ifdef RG_ETC1_BUILD_DEBUG
       // Ensure all alpha values are 0xFF.
-      for (uint i = 0; i < 16; i++)
+      for (uint32_t i = 0; i < 16; i++)
       {
          RG_ETC1_ASSERT(pSrc_pixels[i].a == 255);
       }
@@ -2211,11 +2208,11 @@ found_perfect_match:
       etc1_optimizer optimizer;
 
       uint64_t best_error = cUINT64_MAX;
-      uint best_flip = false, best_use_color4 = false;
+      uint32_t best_flip = false, best_use_color4 = false;
 
       uint8_t best_selectors[2][8];
       etc1_optimizer::results best_results[2];
-      for (uint i = 0; i < 2; i++)
+      for (uint32_t i = 0; i < 2; i++)
       {
          best_results[i].m_n = 8;
          best_results[i].m_pSelectors = best_selectors[i];
@@ -2224,7 +2221,7 @@ found_perfect_match:
       uint8_t selectors[3][8];
       etc1_optimizer::results results[3];
 
-      for (uint i = 0; i < 3; i++)
+      for (uint32_t i = 0; i < 3; i++)
       {
          results[i].m_n = 8;
          results[i].m_pSelectors = selectors[i];
@@ -2236,17 +2233,17 @@ found_perfect_match:
       params.m_num_src_pixels = 8;
       params.m_pSrc_pixels = subblock_pixels;
 
-      for (uint flip = 0; flip < 2; flip++)
+      for (uint32_t flip = 0; flip < 2; flip++)
       {
-         for (uint use_color4 = 0; use_color4 < 2; use_color4++)
+         for (uint32_t use_color4 = 0; use_color4 < 2; use_color4++)
          {
             uint64_t trial_error = 0;
 
-            uint subblock;
+            uint32_t subblock;
             for (subblock = 0; subblock < 2; subblock++)
             {
                if (flip)
-                  memcpy(subblock_pixels, pSrc_pixels + subblock * 8, sizeof(color_quad_u8) * 8);
+                  std::memcpy(subblock_pixels, pSrc_pixels + subblock * 8, sizeof(color_quad_u8) * 8);
                else
                {
                   const color_quad_u8* pSrc_col = pSrc_pixels + subblock * 2;
@@ -2302,8 +2299,8 @@ found_perfect_match:
                if (params.m_quality >= cMediumQuality)
                {
                   // TODO: Fix fairly arbitrary/unrefined thresholds that control how far away to scan for potentially better solutions.
-                  const uint refinement_error_thresh0 = 3000;
-                  const uint refinement_error_thresh1 = 6000;
+                  const uint32_t refinement_error_thresh0 = 3000;
+                  const uint32_t refinement_error_thresh1 = 6000;
                   if (results[subblock].m_error > refinement_error_thresh0)
                   {
                      if (params.m_quality == cMediumQuality)
@@ -2377,7 +2374,7 @@ found_perfect_match:
 
       dst_block.m_bytes[3] = static_cast<uint8_t>( (best_results[1].m_block_inten_table << 2) | (best_results[0].m_block_inten_table << 5) | ((~best_use_color4 & 1) << 1) | best_flip );
 
-      uint selector0 = 0, selector1 = 0;
+      uint32_t selector0 = 0, selector1 = 0;
       if (best_flip)
       {
          // flipped:
@@ -2390,7 +2387,7 @@ found_perfect_match:
          const uint8_t* pSelectors1 = best_results[1].m_pSelectors;
          for (int x = 3; x >= 0; --x)
          {
-            uint b;
+            uint32_t b;
             b = g_selector_index_to_etc1[pSelectors1[4 + x]];
             selector0 = (selector0 << 1) | (b & 1); selector1 = (selector1 << 1) | (b >> 1);
 
@@ -2415,9 +2412,9 @@ found_perfect_match:
          for (int subblock = 1; subblock >= 0; --subblock)
          {
             const uint8_t* pSelectors = best_results[subblock].m_pSelectors + 4;
-            for (uint i = 0; i < 2; i++)
+            for (uint32_t i = 0; i < 2; i++)
             {
-               uint b;
+               uint32_t b;
                b = g_selector_index_to_etc1[pSelectors[3]];
                selector0 = (selector0 << 1) | (b & 1); selector1 = (selector1 << 1) | (b >> 1);
 
