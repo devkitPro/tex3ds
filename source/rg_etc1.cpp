@@ -17,7 +17,9 @@
 //#include <stdio.h>
 #include <math.h>
 
+#if defined(_WIN32) || defined(WIN32)
 #pragma warning (disable: 4201) //  nonstandard extension used : nameless struct/union
+#endif
 
 #if defined(_DEBUG) || defined(DEBUG)
 #define RG_ETC1_BUILD_DEBUG
@@ -509,11 +511,7 @@ namespace rg_etc1
       // big endian uint64:
       // bit ofs:  56  48  40  32  24  16   8   0
       // byte ofs: b0, b1, b2, b3, b4, b5, b6, b7
-      union
-      {
-         uint64 m_uint64;
-         uint8 m_bytes[8];
-      };
+      uint8 m_bytes[8];
 
       uint8 m_low_color[2];
       uint8 m_high_color[2];
@@ -1878,8 +1876,7 @@ done:
 
    static uint etc1_decode_value(uint diff, uint inten, uint selector, uint packed_c)
    {
-      const uint limit = diff ? 32 : 16; limit;
-      RG_ETC1_ASSERT((diff < 2) && (inten < 8) && (selector < 4) && (packed_c < limit));
+      RG_ETC1_ASSERT((diff < 2) && (inten < 8) && (selector < 4) && (packed_c < (diff ? 32 : 16)));
       int c;
       if (diff)
          c = (packed_c >> 2) | (packed_c << 3);
@@ -1938,9 +1935,8 @@ done:
 
    // Packs solid color blocks efficiently using a set of small precomputed tables.
    // For random 888 inputs, MSE results are better than Erricson's ETC1 packer in "slow" mode ~9.5% of the time, is slightly worse only ~.01% of the time, and is equal the rest of the time.
-   static uint64 pack_etc1_block_solid_color(etc1_block& block, const uint8* pColor, etc1_pack_params& pack_params)
+   static uint64 pack_etc1_block_solid_color(etc1_block& block, const uint8* pColor)
    {
-      pack_params;
       RG_ETC1_ASSERT(g_etc1_inverse_lookup[0][255]);
 
       static uint s_next_comp[4] = { 1, 2, 0, 1 };
@@ -2003,8 +1999,10 @@ found_perfect_match:
       block.m_bytes[3] = static_cast<uint8>(((inten | (inten << 3)) << 2) | (diff << 1));
 
       const uint etc1_selector = g_selector_index_to_etc1[(best_x >> 4) & 3];
-      *reinterpret_cast<uint16*>(&block.m_bytes[4]) = (etc1_selector & 2) ? 0xFFFF : 0;
-      *reinterpret_cast<uint16*>(&block.m_bytes[6]) = (etc1_selector & 1) ? 0xFFFF : 0;
+      block.m_bytes[4] = (etc1_selector & 2) ? 0xFF : 0;
+      block.m_bytes[5] = (etc1_selector & 2) ? 0xFF : 0;
+      block.m_bytes[6] = (etc1_selector & 1) ? 0xFF : 0;
+      block.m_bytes[7] = (etc1_selector & 1) ? 0xFF : 0;
 
       const uint best_packed_c0 = (best_x >> 8) & 255;
       if (diff)
@@ -2026,13 +2024,11 @@ found_perfect_match:
    static uint pack_etc1_block_solid_color_constrained(
       etc1_optimizer::results& results,
       uint num_colors, const uint8* pColor,
-      etc1_pack_params& pack_params,
       bool use_diff,
       const color_quad_u8* pBase_color5_unscaled)
    {
       RG_ETC1_ASSERT(g_etc1_inverse_lookup[0][255]);
 
-      pack_params;
       static uint s_next_comp[4] = { 1, 2, 0, 1 };
 
       uint best_error = cUINT32_MAX, best_i = 0;
@@ -2204,7 +2200,7 @@ found_perfect_match:
          if (pSrc_pixels[r].m_u32 != first_pixel_u32)
             break;
       if (!r)
-         return static_cast<unsigned int>(16 * pack_etc1_block_solid_color(dst_block, &pSrc_pixels[0].r, pack_params));
+         return static_cast<unsigned int>(16 * pack_etc1_block_solid_color(dst_block, &pSrc_pixels[0].r));
 
       color_quad_u8 dithered_pixels[16];
       if (pack_params.m_dithering)
@@ -2268,7 +2264,7 @@ found_perfect_match:
                         break;
                   if (!r)
                   {
-                     pack_etc1_block_solid_color_constrained(results[2], 8, &subblock_pixels[0].r, pack_params, !use_color4, (subblock && !use_color4) ? &results[0].m_block_color_unscaled : NULL);
+                     pack_etc1_block_solid_color_constrained(results[2], 8, &subblock_pixels[0].r, !use_color4, (subblock && !use_color4) ? &results[0].m_block_color_unscaled : NULL);
                   }
                }
 
@@ -2372,9 +2368,12 @@ found_perfect_match:
       }
       else
       {
-         if (dr < 0) dr += 8; dst_block.m_bytes[0] = static_cast<uint8>((best_results[0].m_block_color_unscaled.r << 3) | dr);
-         if (dg < 0) dg += 8; dst_block.m_bytes[1] = static_cast<uint8>((best_results[0].m_block_color_unscaled.g << 3) | dg);
-         if (db < 0) db += 8; dst_block.m_bytes[2] = static_cast<uint8>((best_results[0].m_block_color_unscaled.b << 3) | db);
+         if (dr < 0) dr += 8;
+         dst_block.m_bytes[0] = static_cast<uint8>((best_results[0].m_block_color_unscaled.r << 3) | dr);
+         if (dg < 0) dg += 8;
+         dst_block.m_bytes[1] = static_cast<uint8>((best_results[0].m_block_color_unscaled.g << 3) | dg);
+         if (db < 0) db += 8;
+         dst_block.m_bytes[2] = static_cast<uint8>((best_results[0].m_block_color_unscaled.b << 3) | db);
       }
 
       dst_block.m_bytes[3] = static_cast<uint8>( (best_results[1].m_block_inten_table << 2) | (best_results[0].m_block_inten_table << 5) | ((~best_use_color4 & 1) << 1) | best_flip );
