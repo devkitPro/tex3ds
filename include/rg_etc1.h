@@ -10,21 +10,21 @@ namespace rg_etc1
    // If preserve_alpha is true, the alpha channel of the destination pixels will not be overwritten. Otherwise, alpha will be set to 255.
    bool unpack_etc1_block(const void *pETC1_block, unsigned int* pDst_pixels_rgba, bool preserve_alpha = false);
 
-   // Quality setting = the higher the quality, the slower. 
+   // Quality setting = the higher the quality, the slower.
    // To pack large textures, it is highly recommended to call pack_etc1_block() in parallel, on different blocks, from multiple threads (particularly when using cHighQuality).
    enum etc1_quality
-   { 
+   {
       cLowQuality,
       cMediumQuality,
       cHighQuality,
    };
-      
+
    struct etc1_pack_params
    {
       etc1_quality m_quality;
       bool m_dithering;
-                              
-      inline etc1_pack_params() 
+
+      inline etc1_pack_params()
       {
          clear();
       }
@@ -45,7 +45,7 @@ namespace rg_etc1
    // This function is thread safe, and does not dynamically allocate any memory.
    // pack_etc1_block() does not currently support "perceptual" colorspace metrics - it primarily optimizes for RGB RMSE.
    unsigned int pack_etc1_block(void* pETC1_block, const unsigned int* pSrc_pixels_rgba, etc1_pack_params& pack_params);
-            
+
 } // namespace rg_etc1
 
 //------------------------------------------------------------------------------

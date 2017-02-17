@@ -4,8 +4,8 @@
 // For more information Ericsson Texture Compression (ETC/ETC1), see:
 // http://www.khronos.org/registry/gles/extensions/OES/OES_compressed_ETC1_RGB8_texture.txt
 //
-// v1.04 - 5/15/14 - Fix signed vs. unsigned subtraction problem (noticed when compiled with gcc) in pack_etc1_block_init(). 
-//         This issue would cause an assert when this func. was called in debug. (Note this module was developed/testing with MSVC, 
+// v1.04 - 5/15/14 - Fix signed vs. unsigned subtraction problem (noticed when compiled with gcc) in pack_etc1_block_init().
+//         This issue would cause an assert when this func. was called in debug. (Note this module was developed/testing with MSVC,
 //         I still need to test it throughly when compiled with gcc.)
 //
 // v1.03 - 5/12/13 - Initial public release
@@ -36,7 +36,7 @@ namespace rg_etc1
 
    const uint32 cUINT32_MAX = 0xFFFFFFFFU;
    const uint64 cUINT64_MAX = 0xFFFFFFFFFFFFFFFFULL; //0xFFFFFFFFFFFFFFFFui64;
-   
+
    template<typename T> inline T minimum(T a, T b) { return (a < b) ? a : b; }
    template<typename T> inline T minimum(T a, T b, T c) { return minimum(minimum(a, b), c); }
    template<typename T> inline T maximum(T a, T b) { return (a > b) ? a : b; }
@@ -46,7 +46,7 @@ namespace rg_etc1
    template<typename T> inline void zero_object(T& obj) { memset((void*)&obj, 0, sizeof(obj)); }
    template<typename T> inline void zero_this(T* pObj) { memset((void*)pObj, 0, sizeof(*pObj)); }
 
-   template<class T, size_t N> T decay_array_to_subtype(T (&a)[N]);   
+   template<class T, size_t N> T decay_array_to_subtype(T (&a)[N]);
 
 #define RG_ETC1_ARRAY_SIZE(X) (sizeof(X) / sizeof(decay_array_to_subtype(X)))
 
@@ -293,18 +293,18 @@ namespace rg_etc1
    struct vec3F
    {
       float m_s[3];
-      
+
       inline vec3F() { }
       inline vec3F(float s) { m_s[0] = s; m_s[1] = s; m_s[2] = s; }
       inline vec3F(float x, float y, float z) { m_s[0] = x; m_s[1] = y; m_s[2] = z; }
-      
+
       inline float operator[] (uint i) const { RG_ETC1_ASSERT(i < 3); return m_s[i]; }
 
       inline vec3F& operator += (const vec3F& other) { for (uint i = 0; i < 3; i++) m_s[i] += other.m_s[i]; return *this; }
 
       inline vec3F& operator *= (float s) { for (uint i = 0; i < 3; i++) m_s[i] *= s; return *this; }
    };
-     
+
    enum etc_constants
    {
       cETC1BytesPerBlock = 8U,
@@ -363,18 +363,18 @@ namespace rg_etc1
       // 000 001 010 011 100 101 110 111
       // 0   1   2   3   -4  -3  -2  -1
    };
-   
+
    static uint8 g_quant5_tab[256+16];
 
-   static const int g_etc1_inten_tables[cETC1IntenModifierValues][cETC1SelectorValues] = 
-   { 
-      { -8,  -2,   2,   8 }, { -17,  -5,  5,  17 }, { -29,  -9,   9,  29 }, {  -42, -13, 13,  42 }, 
-      { -60, -18, 18,  60 }, { -80, -24, 24,  80 }, { -106, -33, 33, 106 }, { -183, -47, 47, 183 } 
+   static const int g_etc1_inten_tables[cETC1IntenModifierValues][cETC1SelectorValues] =
+   {
+      { -8,  -2,   2,   8 }, { -17,  -5,  5,  17 }, { -29,  -9,   9,  29 }, {  -42, -13, 13,  42 },
+      { -60, -18, 18,  60 }, { -80, -24, 24,  80 }, { -106, -33, 33, 106 }, { -183, -47, 47, 183 }
    };
 
    static const uint8 g_etc1_to_selector_index[cETC1SelectorValues] = { 2, 3, 1, 0 };
    static const uint8 g_selector_index_to_etc1[cETC1SelectorValues] = { 3, 2, 0, 1 };
-      
+
    // Given an ETC1 diff/inten_table/selector, and an 8-bit desired color, this table encodes the best packed_color in the low byte, and the abs error in the high byte.
    static uint16 g_etc1_inverse_lookup[2*8*4][256];      // [diff/inten_table/selector][desired_color]
 
@@ -389,7 +389,7 @@ namespace rg_etc1
    };
 
    // Really only [254][11].
-   static const uint16 g_color8_to_etc_block_config_1_to_254[254][12] = 
+   static const uint16 g_color8_to_etc_block_config_1_to_254[254][12] =
    {
       { 0x021C, 0x0D0D, 0xFFFF }, { 0x0020, 0x0021, 0x0A0B, 0x061F, 0xFFFF }, { 0x0113, 0x0217, 0xFFFF }, { 0x0116, 0x031E,
       0x0B0E, 0x0405, 0xFFFF }, { 0x0022, 0x0204, 0x050A, 0x0023, 0xFFFF }, { 0x0111, 0x0319, 0x0809, 0x170F, 0xFFFF }, {
@@ -508,8 +508,8 @@ namespace rg_etc1
    {
       // big endian uint64:
       // bit ofs:  56  48  40  32  24  16   8   0
-      // byte ofs: b0, b1, b2, b3, b4, b5, b6, b7 
-      union 
+      // byte ofs: b0, b1, b2, b3, b4, b5, b6, b7
+      union
       {
          uint64 m_uint64;
          uint8 m_bytes[8];
@@ -551,10 +551,10 @@ namespace rg_etc1
 
       // false = left/right subblocks
       // true = upper/lower subblocks
-      inline bool get_flip_bit() const 
+      inline bool get_flip_bit() const
       {
          return (m_bytes[3] & 1) != 0;
-      }   
+      }
 
       inline void set_flip_bit(bool flip)
       {
@@ -744,7 +744,7 @@ namespace rg_etc1
    // Returns pointer to sorted array.
    template<typename T, typename Q>
    T* indirect_radix_sort(uint num_indices, T* pIndices0, T* pIndices1, const Q* pKeys, uint key_ofs, uint key_size, bool init_indices)
-   {  
+   {
       RG_ETC1_ASSERT((key_ofs >= 0) && (key_ofs < sizeof(T)));
       RG_ETC1_ASSERT((key_size >= 1) && (key_size <= 4));
 
@@ -756,7 +756,7 @@ namespace rg_etc1
          for (i = 0; p != q; p += 2, i += 2)
          {
             p[0] = static_cast<T>(i);
-            p[1] = static_cast<T>(i + 1); 
+            p[1] = static_cast<T>(i + 1);
          }
 
          if (num_indices & 1)
@@ -796,7 +796,7 @@ namespace rg_etc1
             hist[256 + ((key >>  8) & 0xFF)]++;
             hist[512 + ((key >> 16) & 0xFF)]++;
          }
-      }   
+      }
       else if (key_size == 2)
       {
          T* p = pIndices0;
@@ -821,7 +821,7 @@ namespace rg_etc1
             hist[        key        & 0xFF]++;
             hist[256 + ((key >>  8) & 0xFF)]++;
          }
-      }      
+      }
       else
       {
          RG_ETC1_ASSERT(key_size == 1);
@@ -846,7 +846,7 @@ namespace rg_etc1
 
             hist[key & 0xFF]++;
          }
-      }      
+      }
 
       T* pCur = pIndices0;
       T* pNew = pIndices1;
@@ -913,7 +913,7 @@ namespace rg_etc1
          T* t = pCur;
          pCur = pNew;
          pNew = t;
-      }            
+      }
 
       return pCur;
    }
@@ -925,7 +925,7 @@ namespace rg_etc1
    {
       return pack_color5(color.r, color.g, color.b, scaled, bias);
    }
-   
+
    uint16 etc1_block::pack_color5(uint r, uint g, uint b, bool scaled, uint bias)
    {
       if (scaled)
@@ -970,7 +970,7 @@ namespace rg_etc1
    {
       int dc_r, dc_g, dc_b;
       unpack_delta3(dc_r, dc_g, dc_b, packed_delta3);
-      
+
       int b = (packed_color5 & 31U) + dc_b;
       int g = ((packed_color5 >> 5U) & 31U) + dc_g;
       int r = ((packed_color5 >> 10U) & 31U) + dc_r;
@@ -1004,7 +1004,7 @@ namespace rg_etc1
       b = result.b;
       return success;
    }
-     
+
    uint16 etc1_block::pack_delta3(int r, int g, int b)
    {
       RG_ETC1_ASSERT((r >= cETC1ColorDeltaMin) && (r <= cETC1ColorDeltaMax));
@@ -1015,7 +1015,7 @@ namespace rg_etc1
       if (b < 0) b += 8;
       return static_cast<uint16>(b | (g << 3) | (r << 6));
    }
-   
+
    void etc1_block::unpack_delta3(int& r, int& g, int& b, uint16 packed_delta3)
    {
       r = (packed_delta3 >> 6) & 7;
@@ -1030,7 +1030,7 @@ namespace rg_etc1
    {
       return pack_color4(color.r, color.g, color.b, scaled, bias);
    }
-   
+
    uint16 etc1_block::pack_color4(uint r, uint g, uint b, bool scaled, uint bias)
    {
       if (scaled)
@@ -1062,7 +1062,7 @@ namespace rg_etc1
 
       return color_quad_u8(cNoClamp, r, g, b, rg_etc1::minimum(alpha, 255U));
    }
-   
+
    void etc1_block::unpack_color4(uint& r, uint& g, uint& b, uint16 packed_color4, bool scaled)
    {
       color_quad_u8 c(unpack_color4(packed_color4, scaled, 0));
@@ -1093,7 +1093,7 @@ namespace rg_etc1
       const int y3 = pInten_modifer_table[3];
       pDst[3].set(ir + y3, ig + y3, ib + y3);
    }
-   
+
    bool etc1_block::get_diff_subblock_colors(color_quad_u8* pDst, uint16 packed_color5, uint16 packed_delta3, uint table_idx)
    {
       RG_ETC1_ASSERT(table_idx < cETC1IntenModifierValues);
@@ -1118,7 +1118,7 @@ namespace rg_etc1
 
       return success;
    }
-   
+
    void etc1_block::get_abs_subblock_colors(color_quad_u8* pDst, uint16 packed_color4, uint table_idx)
    {
       RG_ETC1_ASSERT(table_idx < cETC1IntenModifierValues);
@@ -1126,12 +1126,12 @@ namespace rg_etc1
 
       uint r, g, b;
       unpack_color4(r, g, b, packed_color4, true);
-      
+
       const int ir = static_cast<int>(r), ig = static_cast<int>(g), ib = static_cast<int>(b);
 
       const int y0 = pInten_modifer_table[0];
       pDst[0].set(ir + y0, ig + y0, ib + y0);
-      
+
       const int y1 = pInten_modifer_table[1];
       pDst[1].set(ir + y1, ig + y1, ib + y1);
 
@@ -1141,7 +1141,7 @@ namespace rg_etc1
       const int y3 = pInten_modifer_table[3];
       pDst[3].set(ir + y3, ig + y3, ib + y3);
    }
-      
+
    bool unpack_etc1_block(const void* pETC1_block, unsigned int* pDst_pixels_rgba, bool preserve_alpha)
    {
       color_quad_u8* pDst = reinterpret_cast<color_quad_u8*>(pDst_pixels_rgba);
@@ -1161,7 +1161,7 @@ namespace rg_etc1
          const uint16 base_color5 = block.get_base5_color();
          const uint16 delta_color3 = block.get_delta3_color();
          etc1_block::get_diff_subblock_colors(subblock_colors0, base_color5, table_index0);
-            
+
          if (!etc1_block::get_diff_subblock_colors(subblock_colors1, base_color5, delta_color3, table_index1))
             success = false;
       }
@@ -1208,7 +1208,7 @@ namespace rg_etc1
             }
          }
       }
-      else 
+      else
       {
          if (flip_flag)
          {
@@ -1250,7 +1250,7 @@ namespace rg_etc1
             }
          }
       }
-      
+
       return success;
    }
 
@@ -1263,14 +1263,14 @@ namespace rg_etc1
       {
       }
 
-      inline etc1_solution_coordinates(uint r, uint g, uint b, uint inten_table, bool color4) : 
+      inline etc1_solution_coordinates(uint r, uint g, uint b, uint inten_table, bool color4) :
       m_unscaled_color(r, g, b, 255),
          m_inten_table(inten_table),
          m_color4(color4)
       {
       }
 
-      inline etc1_solution_coordinates(const color_quad_u8& c, uint inten_table, bool color4) : 
+      inline etc1_solution_coordinates(const color_quad_u8& c, uint inten_table, bool color4) :
       m_unscaled_color(c),
          m_inten_table(inten_table),
          m_color4(color4)
@@ -1368,7 +1368,7 @@ namespace rg_etc1
             clear();
          }
 
-         params(const etc1_pack_params& base_params) : 
+         params(const etc1_pack_params& base_params) :
          etc1_pack_params(base_params)
          {
             clear_optimizer_params();
@@ -1429,7 +1429,7 @@ namespace rg_etc1
       void init(const params& params, results& result);
       bool compute();
 
-   private:      
+   private:
       struct potential_solution
       {
          potential_solution() : m_coords(), m_error(cUINT64_MAX), m_valid(false)
@@ -1471,12 +1471,12 @@ namespace rg_etc1
       bool evaluate_solution(const etc1_solution_coordinates& coords, potential_solution& trial_solution, potential_solution* pBest_solution);
       bool evaluate_solution_fast(const etc1_solution_coordinates& coords, potential_solution& trial_solution, potential_solution* pBest_solution);
    };
-      
+
    bool etc1_optimizer::compute()
    {
       const uint n = m_pParams->m_num_src_pixels;
       const int scan_delta_size = m_pParams->m_scan_delta_size;
-      
+
       // Scan through a subset of the 3D lattice centered around the avg block color trying each 3D (555 or 444) lattice point as a potential block color.
       // Each time a better solution is found try to refine the current solution's block color based of the current selectors and intensity table index.
       for (int zdi = 0; zdi < scan_delta_size; zdi++)
@@ -1484,7 +1484,7 @@ namespace rg_etc1
          const int zd = m_pParams->m_pScan_deltas[zdi];
          const int mbb = m_bb + zd;
          if (mbb < 0) continue; else if (mbb > m_limit) break;
-         
+
          for (int ydi = 0; ydi < scan_delta_size; ydi++)
          {
             const int yd = m_pParams->m_pScan_deltas[ydi];
@@ -1496,7 +1496,7 @@ namespace rg_etc1
                const int xd = m_pParams->m_pScan_deltas[xdi];
                const int mbr = m_br + xd;
                if (mbr < 0) continue; else if (mbr > m_limit) break;
-      
+
                etc1_solution_coordinates coords(mbr, mbg, mbb, 0, m_pParams->m_use_color4);
                if (m_pParams->m_quality == cHighQuality)
                {
@@ -1508,7 +1508,7 @@ namespace rg_etc1
                   if (!evaluate_solution_fast(coords, m_trial_solution, &m_best_solution))
                      continue;
                }
-               
+
                // Now we have the input block, the avg. color of the input pixels, a set of trial selector indices, and the block color+intensity index.
                // Now, for each component, attempt to refine the current solution by solving a simple linear equation. For example, for 4 colors:
                // The goal is:
@@ -1551,9 +1551,9 @@ namespace rg_etc1
                   const int br1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[0] - avg_delta_r_f) * m_limit / 255.0f + .5f), 0, m_limit);
                   const int bg1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[1] - avg_delta_g_f) * m_limit / 255.0f + .5f), 0, m_limit);
                   const int bb1 = rg_etc1::clamp<int>(static_cast<uint>((m_avg_color[2] - avg_delta_b_f) * m_limit / 255.0f + .5f), 0, m_limit);
-                  
+
                   bool skip = false;
-                  
+
                   if ((mbr == br1) && (mbg == bg1) && (mbb == bb1))
                      skip = true;
                   else if ((br1 == m_best_solution.m_coords.m_unscaled_color.r) && (bg1 == m_best_solution.m_coords.m_unscaled_color.g) && (bb1 == m_best_solution.m_coords.m_unscaled_color.b))
@@ -1567,7 +1567,7 @@ namespace rg_etc1
                   etc1_solution_coordinates coords1(br1, bg1, bb1, 0, m_pParams->m_use_color4);
                   if (m_pParams->m_quality == cHighQuality)
                   {
-                     if (!evaluate_solution(coords1, m_trial_solution, &m_best_solution)) 
+                     if (!evaluate_solution(coords1, m_trial_solution, &m_best_solution))
                         break;
                   }
                   else
@@ -1587,7 +1587,7 @@ namespace rg_etc1
          m_pResult->m_error = cUINT32_MAX;
          return false;
       }
-      
+
       const uint8* pSelectors = m_best_solution.m_selectors;
 
 #ifdef RG_ETC1_BUILD_DEBUG
@@ -1599,16 +1599,16 @@ namespace rg_etc1
          uint64 actual_error = 0;
          for (uint i = 0; i < n; i++)
             actual_error += pSrc_pixels[i].squared_distance_rgb(block_colors[pSelectors[i]]);
-         
+
          RG_ETC1_ASSERT(actual_error == m_best_solution.m_error);
       }
-#endif      
-      
+#endif
+
       m_pResult->m_error = m_best_solution.m_error;
 
       m_pResult->m_block_color_unscaled = m_best_solution.m_coords.m_unscaled_color;
       m_pResult->m_block_color4 = m_best_solution.m_coords.m_color4;
-      
+
       m_pResult->m_block_inten_table = m_best_solution.m_coords.m_inten_table;
       memcpy(m_pResult->m_pSelectors, pSelectors, n);
       m_pResult->m_n = n;
@@ -1620,12 +1620,12 @@ namespace rg_etc1
    {
       // This version is hardcoded for 8 pixel subblocks.
       RG_ETC1_ASSERT(p.m_num_src_pixels == 8);
-      
+
       m_pParams = &p;
       m_pResult = &r;
-                  
+
       const uint n = 8;
-      
+
       m_limit = m_pParams->m_use_color4 ? 15 : 31;
 
       vec3F avg_color(0.0f);
@@ -1653,11 +1653,11 @@ namespace rg_etc1
          m_pSorted_luma = m_sorted_luma[0];
          if (m_pSorted_luma_indices == m_sorted_luma[0])
             m_pSorted_luma = m_sorted_luma[1];
-      
+
          for (uint i = 0; i < n; i++)
             m_pSorted_luma[i] = m_luma[m_pSorted_luma_indices[i]];
       }
-      
+
       m_best_solution.m_coords.clear();
       m_best_solution.m_valid = false;
       m_best_solution.m_error = cUINT64_MAX;
@@ -1678,11 +1678,11 @@ namespace rg_etc1
       }
 
       const color_quad_u8 base_color(coords.get_scaled_color());
-      
+
       const uint n = 8;
-            
+
       trial_solution.m_error = cUINT64_MAX;
-            
+
       for (uint inten_table = 0; inten_table < cETC1IntenModifierValues; inten_table++)
       {
          const int* pInten_table = g_etc1_inten_tables[inten_table];
@@ -1693,14 +1693,14 @@ namespace rg_etc1
             const int yd = pInten_table[s];
             block_colors[s].set(base_color.r + yd, base_color.g + yd, base_color.b + yd, 0);
          }
-         
+
          uint64 total_error = 0;
-         
+
          const color_quad_u8* pSrc_pixels = m_pParams->m_pSrc_pixels;
          for (uint c = 0; c < n; c++)
          {
             const color_quad_u8& src_pixel = *pSrc_pixels++;
-            
+
             uint best_selector_index = 0;
             uint best_error = rg_etc1::square(src_pixel.r - block_colors[0].r) + rg_etc1::square(src_pixel.g - block_colors[0].g) + rg_etc1::square(src_pixel.b - block_colors[0].b);
 
@@ -1731,7 +1731,7 @@ namespace rg_etc1
             if (total_error >= trial_solution.m_error)
                break;
          }
-         
+
          if (total_error < trial_solution.m_error)
          {
             trial_solution.m_error = total_error;
@@ -1774,7 +1774,7 @@ namespace rg_etc1
       const color_quad_u8 base_color(coords.get_scaled_color());
 
       const uint n = 8;
-      
+
       trial_solution.m_error = cUINT64_MAX;
 
       for (int inten_table = cETC1IntenModifierValues - 1; inten_table >= 0; --inten_table)
@@ -1862,7 +1862,7 @@ done:
       }
       trial_solution.m_coords.m_unscaled_color = coords.m_unscaled_color;
       trial_solution.m_coords.m_color4 = m_pParams->m_use_color4;
-      
+
       bool success = false;
       if (pBest_solution)
       {
@@ -1875,7 +1875,7 @@ done:
 
       return success;
    }
-         
+
    static uint etc1_decode_value(uint diff, uint inten, uint selector, uint packed_c)
    {
       const uint limit = diff ? 32 : 16; limit;
@@ -1883,7 +1883,7 @@ done:
       int c;
       if (diff)
          c = (packed_c >> 2) | (packed_c << 3);
-      else 
+      else
          c = packed_c | (packed_c << 4);
       c += g_etc1_inten_tables[inten][selector];
       c = rg_etc1::clamp<int>(c, 0, 255);
@@ -1914,7 +1914,7 @@ done:
                      {
                         best_error = err;
                         best_packed_c = packed_c;
-                        if (!best_error) 
+                        if (!best_error)
                            break;
                      }
                   }
@@ -1924,7 +1924,7 @@ done:
             }
          }
       }
-      
+
       uint expand5[32];
       for(int i = 0; i < 32; i++)
          expand5[i] = (i << 3) | (i >> 2);
@@ -1942,9 +1942,9 @@ done:
    {
       pack_params;
       RG_ETC1_ASSERT(g_etc1_inverse_lookup[0][255]);
-            
+
       static uint s_next_comp[4] = { 1, 2, 0, 1 };
-            
+
       uint best_error = cUINT32_MAX, best_i = 0;
       int best_x = 0, best_packed_c1 = 0, best_packed_c2 = 0;
 
@@ -2001,7 +2001,7 @@ found_perfect_match:
       const uint inten = (best_x >> 1) & 7;
 
       block.m_bytes[3] = static_cast<uint8>(((inten | (inten << 3)) << 2) | (diff << 1));
-                        
+
       const uint etc1_selector = g_selector_index_to_etc1[(best_x >> 4) & 3];
       *reinterpret_cast<uint16*>(&block.m_bytes[4]) = (etc1_selector & 2) ? 0xFFFF : 0;
       *reinterpret_cast<uint16*>(&block.m_bytes[6]) = (etc1_selector & 1) ? 0xFFFF : 0;
@@ -2022,11 +2022,11 @@ found_perfect_match:
 
       return best_error;
    }
-      
+
    static uint pack_etc1_block_solid_color_constrained(
-      etc1_optimizer::results& results, 
-      uint num_colors, const uint8* pColor, 
-      etc1_pack_params& pack_params, 
+      etc1_optimizer::results& results,
+      uint num_colors, const uint8* pColor,
+      etc1_pack_params& pack_params,
       bool use_diff,
       const color_quad_u8* pBase_color5_unscaled)
    {
@@ -2135,7 +2135,7 @@ found_perfect_match:
       results.m_block_color_unscaled[s_next_comp[best_i]] = static_cast<uint8>(best_packed_c1);
       results.m_block_color_unscaled[s_next_comp[best_i + 1]] = static_cast<uint8>(best_packed_c2);
       results.m_error = best_error;
-      
+
       return best_error;
    }
 
@@ -2205,7 +2205,7 @@ found_perfect_match:
             break;
       if (!r)
          return static_cast<unsigned int>(16 * pack_etc1_block_solid_color(dst_block, &pSrc_pixels[0].r, pack_params));
-      
+
       color_quad_u8 dithered_pixels[16];
       if (pack_params.m_dithering)
       {
@@ -2217,7 +2217,7 @@ found_perfect_match:
 
       uint64 best_error = cUINT64_MAX;
       uint best_flip = false, best_use_color4 = false;
-      
+
       uint8 best_selectors[2][8];
       etc1_optimizer::results best_results[2];
       for (uint i = 0; i < 2; i++)
@@ -2225,16 +2225,16 @@ found_perfect_match:
          best_results[i].m_n = 8;
          best_results[i].m_pSelectors = best_selectors[i];
       }
-      
+
       uint8 selectors[3][8];
       etc1_optimizer::results results[3];
-      
+
       for (uint i = 0; i < 3; i++)
       {
          results[i].m_n = 8;
          results[i].m_pSelectors = selectors[i];
       }
-            
+
       color_quad_u8 subblock_pixels[8];
 
       etc1_optimizer::params params(pack_params);
@@ -2280,7 +2280,7 @@ found_perfect_match:
                   params.m_constrain_against_base_color5 = true;
                   params.m_base_color5 = results[0].m_block_color_unscaled;
                }
-                              
+
                if (params.m_quality == cHighQuality)
                {
                   static const int s_scan_delta_0_to_4[] = { -4, -3, -2, -1, 0, 1, 2, 3, 4 };
@@ -2299,11 +2299,11 @@ found_perfect_match:
                   params.m_scan_delta_size = RG_ETC1_ARRAY_SIZE(s_scan_delta_0);
                   params.m_pScan_deltas = s_scan_delta_0;
                }
-               
+
                optimizer.init(params, results[subblock]);
                if (!optimizer.compute())
                   break;
-                              
+
                if (params.m_quality >= cMediumQuality)
                {
                   // TODO: Fix fairly arbitrary/unrefined thresholds that control how far away to scan for potentially better solutions.
@@ -2340,7 +2340,7 @@ found_perfect_match:
                   if (results[2].m_error < results[subblock].m_error)
                      results[subblock] = results[2];
                }
-                            
+
                trial_error += results[subblock].m_error;
                if (trial_error >= best_error)
                   break;
@@ -2354,7 +2354,7 @@ found_perfect_match:
             best_results[1] = results[1];
             best_flip = flip;
             best_use_color4 = use_color4;
-            
+
          } // use_color4
 
       } // flip
@@ -2363,7 +2363,7 @@ found_perfect_match:
       int dg = best_results[1].m_block_color_unscaled.g - best_results[0].m_block_color_unscaled.g;
       int db = best_results[1].m_block_color_unscaled.b - best_results[0].m_block_color_unscaled.b;
       RG_ETC1_ASSERT(best_use_color4 || (rg_etc1::minimum(dr, dg, db) >= cETC1ColorDeltaMin) && (rg_etc1::maximum(dr, dg, db) <= cETC1ColorDeltaMax));
-           
+
       if (best_use_color4)
       {
          dst_block.m_bytes[0] = static_cast<uint8>(best_results[1].m_block_color_unscaled.r | (best_results[0].m_block_color_unscaled.r << 4));
@@ -2376,15 +2376,15 @@ found_perfect_match:
          if (dg < 0) dg += 8; dst_block.m_bytes[1] = static_cast<uint8>((best_results[0].m_block_color_unscaled.g << 3) | dg);
          if (db < 0) db += 8; dst_block.m_bytes[2] = static_cast<uint8>((best_results[0].m_block_color_unscaled.b << 3) | db);
       }
-      
+
       dst_block.m_bytes[3] = static_cast<uint8>( (best_results[1].m_block_inten_table << 2) | (best_results[0].m_block_inten_table << 5) | ((~best_use_color4 & 1) << 1) | best_flip );
-      
+
       uint selector0 = 0, selector1 = 0;
       if (best_flip)
       {
          // flipped:
-         // { 0, 0 }, { 1, 0 }, { 2, 0 }, { 3, 0 },               
-         // { 0, 1 }, { 1, 1 }, { 2, 1 }, { 3, 1 } 
+         // { 0, 0 }, { 1, 0 }, { 2, 0 }, { 3, 0 },
+         // { 0, 1 }, { 1, 1 }, { 2, 1 }, { 3, 1 }
          //
          // { 0, 2 }, { 1, 2 }, { 2, 2 }, { 3, 2 },
          // { 0, 3 }, { 1, 3 }, { 2, 3 }, { 3, 3 }
@@ -2436,7 +2436,7 @@ found_perfect_match:
             }
          }
       }
-                  
+
       dst_block.m_bytes[4] = static_cast<uint8>(selector1 >> 8); dst_block.m_bytes[5] = static_cast<uint8>(selector1 & 0xFF);
       dst_block.m_bytes[6] = static_cast<uint8>(selector0 >> 8); dst_block.m_bytes[7] = static_cast<uint8>(selector0 & 0xFF);
 
