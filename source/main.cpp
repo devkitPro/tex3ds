@@ -1082,13 +1082,33 @@ void process_image(Magick::Image img)
   }
 
   if(!preview_path.empty())
-    preview.write(preview_path);
+  {
+    try
+    {
+        preview.write(preview_path);
+    }
+    catch(...)
+    {
+      try
+      {
+        preview.magick("PNG");
+        preview.write(preview_path);
+      }
+      catch(...)
+      {
+        std::fprintf(stderr, "Failed to output preview\n");
+      }
+    }
+  }
 
   while(!workers.empty())
   {
     workers.back().join();
     workers.pop_back();
   }
+
+  if(output_path.empty())
+    return;
 
   if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
     std::fprintf(stderr, "Warning: output size exceeds compression header limit\n");
