@@ -1,5 +1,6 @@
 #include "compat.h"
 #include "thread.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -11,6 +12,8 @@
 #include "compress.h"
 #include "rg_etc1.h"
 
+#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
+
 typedef std::vector<uint8_t> Buffer;
 
 namespace
@@ -19,23 +22,72 @@ namespace
 std::string output_path;
 std::string preview_path;
 
-enum OutputFormat
+enum ProcessFormat
 {
-  RGBA8888 = '0',
-  RGB888   = '1',
-  RGBA5551 = '2',
-  RGB565   = '3',
-  RGBA4444 = '4',
-  LA88     = '5',
-  HILO88   = '6',
-  L8       = '7',
-  A8       = '8',
-  LA44     = '9',
-  L4       = 'a',
-  A4       = 'b',
-  ETC1     = 'c',
-  ETC1A4   = 'd',
+  RGBA8888,
+  RGB888,
+  RGBA5551,
+  RGB565,
+  RGBA4444,
+  LA88,
+  HILO88,
+  L8,
+  A8,
+  LA44,
+  L4,
+  A4,
+  ETC1,
+  ETC1A4,
+  AUTO_L8,
+  AUTO_L4,
+  AUTO_ETC1,
 } process_format = RGBA8888;
+
+struct ProcessFormatString
+{
+  const char    *str;
+  ProcessFormat fmt;
+
+  bool operator<(const char *str) const
+  {
+    return strcasecmp(this->str, str) < 0;
+  }
+} output_format_strings[] =
+{
+  { "a",         A8,       },
+  { "a4",        A4,       },
+  { "a8",        A8,       },
+  { "auto-etc1", AUTO_L8,  },
+  { "auto-l4",   AUTO_L8,  },
+  { "auto-l8",   AUTO_L8,  },
+  { "etc1",      ETC1,     },
+  { "etc1a4",    ETC1A4,   },
+  { "hilo",      HILO88,   },
+  { "hilo8",     HILO88,   },
+  { "hilo88",    HILO88,   },
+  { "l",         L8,       },
+  { "l4",        L4,       },
+  { "l8",        L8,       },
+  { "la",        LA88,     },
+  { "la4",       LA44,     },
+  { "la44",      LA44,     },
+  { "la8",       LA88,     },
+  { "la88",      LA88,     },
+  { "rgb",       RGB888,   },
+  { "rgb565",    RGB565,   },
+  { "rgb8",      RGB888,   },
+  { "rgb888",    RGB888,   },
+  { "rgba",      RGBA8888, },
+  { "rgba4",     RGBA4444, },
+  { "rgba4444",  RGBA4444, },
+  { "rgba5551",  RGBA5551, },
+  { "rgba8",     RGBA8888, },
+  { "rgba8888",  RGBA8888, },
+};
+ProcessFormatString *output_format_strings_end =
+  output_format_strings + ARRAY_COUNT(output_format_strings);
+
+rg_etc1::etc1_quality etc1_quality = rg_etc1::cHighQuality;
 
 enum CompressionFormat
 {
@@ -47,6 +99,74 @@ enum CompressionFormat
   COMPRESSION_HUFF,
 } compression_format = COMPRESSION_NONE;
 
+struct CompressionFormatString
+{
+  const char        *str;
+  CompressionFormat fmt;
+
+  bool operator<(const char *str) const
+  {
+    return strcasecmp(this->str, str) < 0;
+  }
+} compression_format_strings[] =
+{
+  { "fake",     COMPRESSION_FAKE, },
+  { "huff",     COMPRESSION_HUFF, },
+  { "huffman",  COMPRESSION_HUFF, },
+  { "lz10",     COMPRESSION_LZ10, },
+  { "lz11",     COMPRESSION_LZ11, },
+  { "lzss",     COMPRESSION_LZ10, },
+  { "none",     COMPRESSION_NONE, },
+  { "rle",      COMPRESSION_RLE,  },
+};
+CompressionFormatString *compression_format_strings_end =
+  compression_format_strings + ARRAY_COUNT(compression_format_strings);
+
+struct FilterTypeString
+{
+  const char          *str;
+  Magick::FilterTypes type;
+
+  bool operator<(const char *str) const
+  {
+    return strcasecmp(this->str, str) < 0;
+  }
+} filter_type_strings[] =
+{
+  { "bartlett",       Magick::BartlettFilter,      },
+  { "bessel",         Magick::BesselFilter,        },
+  { "blackman",       Magick::BlackmanFilter,      },
+  { "bohman",         Magick::BohmanFilter,        },
+  { "box",            Magick::BoxFilter,           },
+  { "catrom",         Magick::CatromFilter,        },
+  { "cosine",         Magick::CosineFilter,        },
+  { "cubic",          Magick::CubicFilter,         },
+  { "gaussian",       Magick::GaussianFilter,      },
+  { "hamming",        Magick::HammingFilter,       },
+  { "hanning",        Magick::HanningFilter,       },
+  { "hermite",        Magick::HermiteFilter,       },
+  { "jinc",           Magick::JincFilter,          },
+  { "kaiser",         Magick::KaiserFilter,        },
+  { "lagrange",       Magick::LagrangeFilter,      },
+  { "lanczos",        Magick::LanczosFilter,       },
+  { "lanczos-radius", Magick::LanczosRadiusFilter, },
+  { "lanczos-sharp",  Magick::LanczosSharpFilter,  },
+  { "lanczos2",       Magick::LanczosFilter,       },
+  { "lanczos2-sharp", Magick::LanczosSharpFilter,  },
+  { "mitchell",       Magick::MitchellFilter,      },
+  { "parzen",         Magick::ParzenFilter,        },
+  { "point",          Magick::PointFilter,         },
+  { "quadratic",      Magick::QuadraticFilter,     },
+  { "robidoux",       Magick::RobidouxFilter,      },
+  { "robidoux-sharp", Magick::RobidouxSharpFilter, },
+  { "sinc",           Magick::SincFilter,          },
+  { "spline",         Magick::SplineFilter,        },
+  { "triangle",       Magick::TriangleFilter,      },
+  { "welsh",          Magick::WelshFilter,         },
+};
+FilterTypeString *filter_type_strings_end =
+  filter_type_strings + ARRAY_COUNT(filter_type_strings);
+ 
 Magick::FilterTypes filter_type = Magick::UndefinedFilter;
 
 Magick::Image load_image(const char *path)
@@ -99,7 +219,7 @@ void swizzle(Magick::PixelPacket *p)
     { 47, 59, 61, 55, },
   };
 
-  for(size_t i = 0; i < sizeof(table)/sizeof(table[0]); ++i)
+  for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
   {
     Magick::PixelPacket tmp = p[table[i][0]];
     p[table[i][0]]          = p[table[i][1]];
@@ -566,6 +686,7 @@ void process_etc1(WorkUnit &work)
 {
   rg_etc1::etc1_pack_params params;
   params.clear();
+  params.m_quality = etc1_quality;
 
   for(size_t j = 0; j < 8; j += 4)
   {
@@ -625,6 +746,7 @@ void process_etc1a4(WorkUnit &work)
 {
   rg_etc1::etc1_pack_params params;
   params.clear();
+  params.m_quality = etc1_quality;
 
   for(size_t j = 0; j < 8; j += 4)
   {
@@ -727,6 +849,23 @@ THREAD_RETURN_T work_thread(void *param)
   }
 }
 
+template<int bits>
+bool has_alpha(Magick::Image &img)
+{
+  Magick::Pixels cache(img);
+  const Magick::PixelPacket *p = cache.getConst(0, 0, img.columns(), img.rows());
+
+  size_t num = img.rows() * img.columns();
+  for(size_t i = 0; i < num; ++i)
+  {
+    Magick::Color c = *p++;
+    if(quantum_to_bits<bits>(c.alphaQuantum()))
+      return true;
+  }
+
+  return false;
+}
+
 void process_image(Magick::Image img)
 {
   void (*process)(WorkUnit&);
@@ -790,6 +929,25 @@ void process_image(Magick::Image img)
     case ETC1A4:
       rg_etc1::pack_etc1_block_init();
       process = process_etc1a4;
+      break;
+
+    case AUTO_L8:
+      process = process_l8;
+      if(has_alpha<8>(img))
+        process = process_la88;
+      break;
+
+    case AUTO_L4:
+      process = process_l4;
+      if(has_alpha<4>(img))
+        process = process_la44;
+      break;
+
+    case AUTO_ETC1:
+      rg_etc1::pack_etc1_block_init();
+      process = process_etc1;
+      if(has_alpha<4>(img))
+        process = process_etc1a4;
       break;
   }
 
@@ -977,80 +1135,79 @@ void process_image(Magick::Image img)
 
 void print_usage(const char *prog)
 {
-  std::printf("Usage: %s [<format>] [-m <filter>] [-o <output>] [-p <preview>] [-z <compression>] <input>\n", prog);
-  std::printf(
-    "    <format>         See \"Format options\"\n"
-    "    -m <filter>      Generate mipmaps. See \"Filter options\"\n"
-    "    -o <output>      Output file\n"
-    "    -p <preview>     Output preview file\n"
-    "    -z <compression> Compress output. See \"Compression options\"\n"
-    "    <input>          Input file\n\n"
+  std::printf("Usage: %s [-f <format>] [-m <filter>] [-o <output>] [-p <preview>] [-q <etc1-quality>] [-z <compression>] <input>\n", prog);
 
-    "  Format options:\n"
-    "    -0, --rgba, --rgba8, --rgba8888\n"
+  std::printf(
+    "    -f <format>       See \"Format Options\"\n"
+    "    -m <filter>       Generate mipmaps. See \"Mipmap Filter Options\"\n"
+    "    -o <output>       Output file\n"
+    "    -p <preview>      Output preview file\n"
+    "    -q <etc1-quality> ETC1 quality. Valid options: low, medium, high (default)\n"
+    "    -z <compression>  Compress output. See \"Compression Options\"\n"
+    "    <input>           Input file\n\n"
+
+    "  Format Options:\n"
+    "    -f rgba, -f rgba8, -f rgba8888\n"
     "      32-bit RGBA (8-bit components) (default)\n\n"
 
-    "    -1, --rgb, --rgb8, --rgb888\n"
+    "    -f rgb, -f rgb8, -f rgb888\n"
     "      24-bit RGB (8-bit components)\n\n"
 
-    "    -2, --rgba5551\n"
+    "    -f rgba5551\n"
     "      16-bit RGBA (5-bit RGB, 1-bit Alpha)\n\n"
 
-    "    -3, --rgb565\n"
+    "    -f rgb565\n"
     "      16-bit RGB (5-bit Red/Blue, 6-bit Green)\n\n"
 
-    "    -4, --rgba4, --rgba444\n"
+    "    -f rgba4, -f rgba444\n"
     "      16-bit RGBA (4-bit components)\n\n"
 
-    "    -5, --la, --la8, --la88\n"
+    "    -f la, -f la8, -f la88\n"
     "      16-bit Luminance/Alpha (8-bit components)\n\n"
 
-    "    -6, --hilo, --hilo8, --hilo88\n"
+    "    -f hilo, -f hilo8, -f hilo88\n"
     "      16-bit HILO (8-bit components)\n"
     "      Note: HI comes from Red channel, LO comes from Green channel\n\n"
 
-    "    -7, --l, --l8\n"
+    "    -f l, -f l8\n"
     "      8-bit Luminance\n\n"
 
-    "    -8, --a, --a8\n"
+    "    -f a, -f a8\n"
     "      8-bit Alpha\n\n"
 
-    "    -9, --la4, --la44\n"
+    "    -f la4, -f la44\n"
     "      8-bit Luminance/Alpha (4-bit components)\n\n"
 
-    "    -a, --l4\n"
+    "    -f l4\n"
     "      4-bit Luminance\n\n"
 
-    "    -b, --a4\n"
+    "    -f a4\n"
     "      4-bit Alpha\n\n"
 
-    "    -c, --etc1\n"
+    "    -f etc1\n"
     "      ETC1\n\n"
 
-    "    -d, --etc1a4\n"
+    "    -f etc1a4\n"
     "      ETC1 with 4-bit Alpha\n\n"
 
-    "  Filter options:\n"
-    "    -m bessel     Bessel filter\n"
-    "    -m blackman   Blackman filter\n"
-    "    -m box        Box filter\n"
-    "    -m catrom     Catrom filter\n"
-    "    -m cubic      Cubic filter\n"
-    "    -m gaussian   Gaussian filter\n"
-    "    -m hamming    Hamming filter\n"
-    "    -m hanning    Hanning filter\n"
-    "    -m hermite    Hermite filter\n"
-    "    -m lanczos    Lanczos filter\n"
-    "    -m mitchell   Mitchell filter\n"
-    "    -m point      Point filter\n"
-    "    -m quadratic  Quadratic filter\n"
-    "    -m sinc       Sinc filter\n"
-    "    -m triangle   Triangle filter\n\n"
+    "    -f auto-l8\n"
+    "      L8 when input has no alpha, otherwise LA8\n\n"
 
-    "  Compression options:\n"
+    "    -f auto-l4\n"
+    "      L4 when input has no alpha, otherwise LA4\n\n"
+
+    "    -f auto-etc1\n"
+    "      ETC1 when input has no alpha, otherwise ETC1A4\n\n"
+
+    "  Mipmap Filter Options:\n");
+    for(size_t i = 0; i < ARRAY_COUNT(filter_type_strings); ++i)
+      std::printf("    -m %s\n", filter_type_strings[i].str);
+
+    std::printf("\n"
+    "  Compression Options:\n"
     "    -z none              No compression (default)\n"
     "    -z fake              Fake compression header\n"
-    "    -z huff, -z huffman  Huffman encoding (unsupported, possible to produce garbage)\n"
+    "    -z huff, -z huffman  Huffman encoding (possible to produce garbage)\n"
     "    -z lzss, -z lz10     LZSS compression\n"
     "    -z lz11              LZ11 compression\n"
     "    -z rle               Run-length encoding\n\n"
@@ -1067,33 +1224,9 @@ void print_usage(const char *prog)
 
 const struct option long_options[] =
 {
-  { "rgba",     no_argument,       nullptr, '0', },
-  { "rgba8",    no_argument,       nullptr, '0', },
-  { "rgba8888", no_argument,       nullptr, '0', },
-  { "rgb",      no_argument,       nullptr, '1', },
-  { "rgb8",     no_argument,       nullptr, '1', },
-  { "rgb888",   no_argument,       nullptr, '1', },
-  { "rgba5551", no_argument,       nullptr, '2', },
-  { "rgb565",   no_argument,       nullptr, '3', },
-  { "rgba4",    no_argument,       nullptr, '4', },
-  { "rgba4444", no_argument,       nullptr, '4', },
-  { "la",       no_argument,       nullptr, '5', },
-  { "la8",      no_argument,       nullptr, '5', },
-  { "la88",     no_argument,       nullptr, '5', },
-  { "hilo",     no_argument,       nullptr, '6', },
-  { "hilo8",    no_argument,       nullptr, '6', },
-  { "hilo88",   no_argument,       nullptr, '6', },
-  { "l",        no_argument,       nullptr, '7', },
-  { "l8",       no_argument,       nullptr, '7', },
-  { "a",        no_argument,       nullptr, '8', },
-  { "a8",       no_argument,       nullptr, '8', },
-  { "la4",      no_argument,       nullptr, '9', },
-  { "la44",     no_argument,       nullptr, '9', },
-  { "l4",       no_argument,       nullptr, 'a', },
-  { "a4",       no_argument,       nullptr, 'b', },
-  { "etc1",     no_argument,       nullptr, 'c', },
-  { "etc1a4",   no_argument,       nullptr, 'd', },
+  { "format",   required_argument, nullptr, 'f', },
   { "output",   required_argument, nullptr, 'o', },
+  { "quality",  required_argument, nullptr, 'q', },
   { "compress", required_argument, nullptr, 'z', },
   { nullptr,    no_argument,       nullptr,   0, },
 };
@@ -1106,58 +1239,47 @@ int main(int argc, char *argv[])
 
   int c;
 
-  while((c = ::getopt_long(argc, argv, "0123456789abcdhm:o:p:s:z:ABCD", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:s:z:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
-      case 'A' ... 'D':
-        c = (c - 'A') + 'a';
-      case '0' ... '9':
-      case 'a' ... 'd':
-        process_format = static_cast<OutputFormat>(c);
+      case 'f':
+      {
+        ProcessFormatString *it =
+          std::lower_bound(output_format_strings,
+                           output_format_strings_end,
+                           optarg);
+        if(it != output_format_strings_end && strcasecmp(it->str, optarg) == 0)
+          process_format = it->fmt;
+        else
+        {
+          std::fprintf(stderr, "Invalid format option '%s'\n", optarg);
+          return EXIT_FAILURE;
+        }
+
         break;
+      }
 
       case 'h':
         print_usage(prog);
         return EXIT_SUCCESS;
 
       case 'm':
-        if(strcasecmp(optarg, "bessel") == 0)
-          filter_type = Magick::BesselFilter;
-        else if(strcasecmp(optarg, "blackman") == 0)
-          filter_type = Magick::BlackmanFilter;
-        else if(strcasecmp(optarg, "box") == 0)
-          filter_type = Magick::BoxFilter;
-        else if(strcasecmp(optarg, "catrom") == 0)
-          filter_type = Magick::CatromFilter;
-        else if(strcasecmp(optarg, "cubic") == 0)
-          filter_type = Magick::CubicFilter;
-        else if(strcasecmp(optarg, "gaussian") == 0)
-          filter_type = Magick::GaussianFilter;
-        else if(strcasecmp(optarg, "hamming") == 0)
-          filter_type = Magick::HammingFilter;
-        else if(strcasecmp(optarg, "hanning") == 0)
-          filter_type = Magick::HanningFilter;
-        else if(strcasecmp(optarg, "hermite") == 0)
-          filter_type = Magick::HermiteFilter;
-        else if(strcasecmp(optarg, "lanczos") == 0)
-          filter_type = Magick::LanczosFilter;
-        else if(strcasecmp(optarg, "mitchell") == 0)
-          filter_type = Magick::MitchellFilter;
-        else if(strcasecmp(optarg, "point") == 0)
-          filter_type = Magick::PointFilter;
-        else if(strcasecmp(optarg, "quadratic") == 0)
-          filter_type = Magick::QuadraticFilter;
-        else if(strcasecmp(optarg, "sinc") == 0)
-          filter_type = Magick::SincFilter;
-        else if(strcasecmp(optarg, "triangle") == 0)
-          filter_type = Magick::TriangleFilter;
+      {
+        FilterTypeString *it =
+          std::lower_bound(filter_type_strings,
+                           filter_type_strings_end,
+                           optarg);
+        if(it != filter_type_strings_end && strcasecmp(it->str, optarg) == 0)
+          filter_type = it->type;
         else
         {
-          std::fprintf(stderr, "Invalid mipmap filter option '%s'\n", optarg);
+          std::fprintf(stderr, "Invalid mipmap filter type '%s'\n", optarg);
           return EXIT_FAILURE;
         }
+
         break;
+      }
 
       case 'o':
         output_path = optarg;
@@ -1167,25 +1289,34 @@ int main(int argc, char *argv[])
         preview_path = optarg;
         break;
 
+      case 'q':
+        if(strcasecmp("low", optarg) == 0)
+          etc1_quality = rg_etc1::cLowQuality;
+        else if(strcasecmp("medium", optarg) == 0
+             || strcasecmp("med", optarg) == 0)
+          etc1_quality = rg_etc1::cMediumQuality;
+        else if(strcasecmp("high", optarg) == 0)
+          etc1_quality = rg_etc1::cHighQuality;
+        else
+          std::fprintf(stderr, "Invalid ETC1 quality '%s'\n", optarg);
+        break;
+
       case 'z':
-        if(strcasecmp(optarg, "none") == 0)
-          compression_format = COMPRESSION_NONE;
-        else if(strcasecmp(optarg, "fake") == 0)
-          compression_format = COMPRESSION_FAKE;
-        else if(strcasecmp(optarg, "huff") == 0 || strcasecmp(optarg, "huffman") == 0)
-          compression_format = COMPRESSION_HUFF;
-        else if(strcasecmp(optarg, "lzss") == 0 || strcasecmp(optarg, "lz10") == 0)
-          compression_format = COMPRESSION_LZ10;
-        else if(strcasecmp(optarg, "lz11") == 0)
-          compression_format = COMPRESSION_LZ11;
-        else if(strcasecmp(optarg, "rle") == 0)
-          compression_format = COMPRESSION_RLE;
+      {
+        CompressionFormatString *it =
+          std::lower_bound(compression_format_strings,
+                           compression_format_strings_end,
+                           optarg);
+        if(it != compression_format_strings_end && strcasecmp(it->str, optarg) == 0)
+          compression_format = it->fmt;
         else
         {
           std::fprintf(stderr, "Invalid compression option '%s'\n", optarg);
           return EXIT_FAILURE;
         }
+
         break;
+      }
 
       default:
         std::fprintf(stderr, "Invalid option '%c'\n", optopt);
