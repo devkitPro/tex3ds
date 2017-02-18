@@ -28,12 +28,17 @@
 
 static inline unsigned int get_num_threads()
 {
+  static unsigned int num_threads = 0;
+  if(num_threads)
+    return num_threads;
+
   long rc = sysconf(_SC_NPROCESSORS_ONLN);
   if(rc < 1)
     rc = sysconf(_SC_NPROCESSORS_CONF);
   if(rc < 1)
     throw std::runtime_error("Failed to get number of processors");
 
+  num_threads = rc;
   return rc;
 }
 
