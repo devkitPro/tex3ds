@@ -87,7 +87,7 @@ struct ProcessFormatString
 ProcessFormatString *output_format_strings_end =
   output_format_strings + ARRAY_COUNT(output_format_strings);
 
-rg_etc1::etc1_quality etc1_quality = rg_etc1::cHighQuality;
+rg_etc1::etc1_quality etc1_quality = rg_etc1::cMediumQuality;
 
 enum CompressionFormat
 {
@@ -1142,7 +1142,7 @@ void print_usage(const char *prog)
     "    -m <filter>       Generate mipmaps. See \"Mipmap Filter Options\"\n"
     "    -o <output>       Output file\n"
     "    -p <preview>      Output preview file\n"
-    "    -q <etc1-quality> ETC1 quality. Valid options: low, medium, high (default)\n"
+    "    -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
     "    -z <compression>  Compress output. See \"Compression Options\"\n"
     "    <input>           Input file\n\n"
 
