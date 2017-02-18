@@ -1,3 +1,22 @@
+/*------------------------------------------------------------------------------
+ * Copyright (c) 2017
+ *     Michael Theall (mtheall)
+ *
+ * This file is part of 3dstex.
+ *
+ * 3dstex is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * 3dstex is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
+ *----------------------------------------------------------------------------*/
 #include "compat.h"
 #include "encode.h"
 #include "quantum.h"
@@ -591,6 +610,26 @@ void process_image(Magick::Image img)
     std::free(buffer);
 }
 
+void print_version()
+{
+  std::printf(
+    "3dstex v1.0.0\n"
+    "Copyright (c) 2017 Michael Theall (mtheall)\n\n"
+
+    "3dstex is free software: you can redistribute it and/or modify\n"
+    "it under the terms of the GNU General Public License as published by\n"
+    "the Free Software Foundation, either version 3 of the License, or\n"
+    "(at your option) any later version.\n\n"
+
+    "3dstex is distributed in the hope that it will be useful,\n"
+    "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+    "GNU General Public License for more details.\n\n"
+
+    "You should have received a copy of the GNU General Public License\n"
+    "along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.\n");
+}
+
 void print_usage(const char *prog)
 {
   std::printf("Usage: %s [-f <format>] [-m <filter>] [-o <output>] [-p <preview>] [-q <etc1-quality>] [-z <compression>] <input>\n", prog);
@@ -686,6 +725,7 @@ const struct option long_options[] =
   { "output",   required_argument, nullptr, 'o', },
   { "quality",  required_argument, nullptr, 'q', },
   { "compress", required_argument, nullptr, 'z', },
+  { "version",  no_argument,       nullptr, 'v', },
   { nullptr,    no_argument,       nullptr,   0, },
 };
 
@@ -697,7 +737,7 @@ int main(int argc, char *argv[])
 
   int c;
 
-  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:s:z:", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:s:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
@@ -758,6 +798,10 @@ int main(int argc, char *argv[])
         else
           std::fprintf(stderr, "Invalid ETC1 quality '%s'\n", optarg);
         break;
+
+      case 'v':
+        print_version();
+        return EXIT_SUCCESS;
 
       case 'z':
       {
