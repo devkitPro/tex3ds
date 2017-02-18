@@ -2216,6 +2216,7 @@ found_perfect_match:
       {
          best_results[i].m_n = 8;
          best_results[i].m_pSelectors = best_selectors[i];
+         best_results[i].m_block_inten_table = 0;
       }
 
       uint8_t selectors[3][8];

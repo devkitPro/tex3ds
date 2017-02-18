@@ -304,8 +304,8 @@ bool has_alpha(Magick::Image &img)
 
 void process_image(Magick::Image img)
 {
-  void (*process)(encode::WorkUnit&);
-  void* (*compress)(const void*,size_t,size_t*);
+  void (*process)(encode::WorkUnit&) = nullptr;
+  void* (*compress)(const void*,size_t,size_t*) = nullptr;
 
   switch(process_format)
   {
