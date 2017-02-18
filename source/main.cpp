@@ -35,7 +35,7 @@ enum OutputFormat
   A4       = 'b',
   ETC1     = 'c',
   ETC1A4   = 'd',
-} output_format = RGBA8888;
+} process_format = RGBA8888;
 
 enum CompressionFormat
 {
@@ -192,7 +192,9 @@ struct WorkUnit
   uint64_t            sequence;
   Magick::PixelPacket *p;
   size_t              stride;
-  void (*output)(WorkUnit&);
+  bool                output;
+  bool                preview;
+  void (*process)(WorkUnit&);
 
   bool operator<(const WorkUnit &other) const
   {
@@ -201,7 +203,7 @@ struct WorkUnit
   }
 };
 
-void output_rgba8888(WorkUnit &work)
+void process_rgba8888(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -209,15 +211,28 @@ void output_rgba8888(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(alpha(c)));
-      work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
-      work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-      work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      if(work.output)
+      {
+        work.result.push_back(quantum_to_bits<8>(alpha(c)));
+        work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
+        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
+        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<8>(c.redQuantum()));
+        c.greenQuantum(quantize<8>(c.greenQuantum()));
+        c.blueQuantum(quantize<8>(c.blueQuantum()));
+        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_rgb888(WorkUnit &work)
+void process_rgb888(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -225,73 +240,27 @@ void output_rgb888(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
-      work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-      work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      if(work.output)
+      {
+        work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
+        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
+        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<8>(c.redQuantum()));
+        c.greenQuantum(quantize<8>(c.greenQuantum()));
+        c.blueQuantum(quantize<8>(c.blueQuantum()));
+        c.alphaQuantum(0);
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_rgba5551(WorkUnit &work)
-{
-  for(size_t j = 0; j < 8; ++j)
-  {
-    for(size_t i = 0; i < 8; ++i)
-    {
-      unsigned int  v;
-      Magick::Color c = work.p[j*work.stride + i];
-
-      v = (quantum_to_bits<5>(c.redQuantum())   << 11)
-        | (quantum_to_bits<5>(c.greenQuantum()) <<  6)
-        | (quantum_to_bits<5>(c.blueQuantum())  <<  1)
-        | (quantum_to_bits<1>(alpha(c))         <<  0);
-
-      work.result.push_back(v >> 0);
-      work.result.push_back(v >> 8);
-    }
-  }
-}
-
-void output_rgb565(WorkUnit &work)
-{
-  for(size_t j = 0; j < 8; ++j)
-  {
-    for(size_t i = 0; i < 8; ++i)
-    {
-      unsigned int  v;
-      Magick::Color c = work.p[j*work.stride + i];
-
-      v = (quantum_to_bits<5>(c.redQuantum())   << 11)
-        | (quantum_to_bits<6>(c.greenQuantum()) <<  5)
-        | (quantum_to_bits<5>(c.blueQuantum())  <<  0);
-
-      work.result.push_back(v >> 0);
-      work.result.push_back(v >> 8);
-    }
-  }
-}
-
-void output_rgba4444(WorkUnit &work)
-{
-  for(size_t j = 0; j < 8; ++j)
-  {
-    for(size_t i = 0; i < 8; ++i)
-    {
-      unsigned int  v;
-      Magick::Color c = work.p[j*work.stride + i];
-
-      v = (quantum_to_bits<4>(alpha(c))         <<  0)
-        | (quantum_to_bits<4>(c.blueQuantum())  <<  4)
-        | (quantum_to_bits<4>(c.greenQuantum()) <<  8)
-        | (quantum_to_bits<4>(c.redQuantum())   << 12);
-
-      work.result.push_back(v >> 0);
-      work.result.push_back(v >> 8);
-    }
-  }
-}
-
-void output_la88(WorkUnit &work)
+void process_rgba5551(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -299,13 +268,31 @@ void output_la88(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(alpha(c)));
-      work.result.push_back(quantum_to_bits<8>(luminance(c)));
+      if(work.output)
+      {
+        unsigned int v = (quantum_to_bits<5>(c.redQuantum())   << 11)
+                       | (quantum_to_bits<5>(c.greenQuantum()) <<  6)
+                       | (quantum_to_bits<5>(c.blueQuantum())  <<  1)
+                       | (quantum_to_bits<1>(alpha(c))         <<  0);
+
+        work.result.push_back(v >> 0);
+        work.result.push_back(v >> 8);
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<5>(c.redQuantum()));
+        c.greenQuantum(quantize<5>(c.greenQuantum()));
+        c.blueQuantum(quantize<5>(c.blueQuantum()));
+        c.alphaQuantum(quantize<1>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_hilo88(WorkUnit &work)
+void process_rgb565(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -313,13 +300,30 @@ void output_hilo88(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-      work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      if(work.output)
+      {
+        unsigned int v = (quantum_to_bits<5>(c.redQuantum())   << 11)
+                       | (quantum_to_bits<6>(c.greenQuantum()) <<  5)
+                       | (quantum_to_bits<5>(c.blueQuantum())  <<  0);
+
+        work.result.push_back(v >> 0);
+        work.result.push_back(v >> 8);
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<5>(c.redQuantum()));
+        c.greenQuantum(quantize<6>(c.greenQuantum()));
+        c.blueQuantum(quantize<5>(c.blueQuantum()));
+        c.alphaQuantum(0);
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_l8(WorkUnit &work)
+void process_rgba4444(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -327,12 +331,31 @@ void output_l8(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(luminance(c)));
+      if(work.output)
+      {
+        unsigned int v = (quantum_to_bits<4>(alpha(c))         <<  0)
+                       | (quantum_to_bits<4>(c.blueQuantum())  <<  4)
+                       | (quantum_to_bits<4>(c.greenQuantum()) <<  8)
+                       | (quantum_to_bits<4>(c.redQuantum())   << 12);
+
+        work.result.push_back(v >> 0);
+        work.result.push_back(v >> 8);
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<4>(c.redQuantum()));
+        c.greenQuantum(quantize<4>(c.greenQuantum()));
+        c.blueQuantum(quantize<4>(c.blueQuantum()));
+        c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_a8(WorkUnit &work)
+void process_la88(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -340,12 +363,28 @@ void output_a8(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back(quantum_to_bits<8>(alpha(c)));
+      if(work.output)
+      {
+        work.result.push_back(quantum_to_bits<8>(alpha(c)));
+        work.result.push_back(quantum_to_bits<8>(luminance(c)));
+      }
+
+      if(work.preview)
+      {
+        Magick::Quantum l = quantize<8>(luminance(c));
+
+        c.redQuantum(l);
+        c.greenQuantum(l);
+        c.blueQuantum(l);
+        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_la44(WorkUnit &work)
+void process_hilo88(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -353,13 +392,105 @@ void output_la44(WorkUnit &work)
     {
       Magick::Color c = work.p[j*work.stride + i];
 
-      work.result.push_back((quantum_to_bits<4>(luminance(c)) << 4)
-                     | (quantum_to_bits<4>(alpha(c))     << 0));
+      if(work.output)
+      {
+        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
+        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+      }
+
+      if(work.preview)
+      {
+        c.redQuantum(quantize<8>(c.redQuantum()));
+        c.greenQuantum(quantize<8>(c.greenQuantum()));
+        c.blueQuantum(0);
+        c.alphaQuantum(0);
+
+        work.p[j*work.stride + i] = c;
+      }
     }
   }
 }
 
-void output_l4(WorkUnit &work)
+void process_l8(WorkUnit &work)
+{
+  for(size_t j = 0; j < 8; ++j)
+  {
+    for(size_t i = 0; i < 8; ++i)
+    {
+      Magick::Color c = work.p[j*work.stride + i];
+
+      if(work.output)
+        work.result.push_back(quantum_to_bits<8>(luminance(c)));
+
+      if(work.preview)
+      {
+        Magick::Quantum l = quantize<8>(luminance(c));
+
+        c.redQuantum(l);
+        c.greenQuantum(l);
+        c.blueQuantum(l);
+        c.alphaQuantum(0);
+
+        work.p[j*work.stride + i] = c;
+      }
+    }
+  }
+}
+
+void process_a8(WorkUnit &work)
+{
+  for(size_t j = 0; j < 8; ++j)
+  {
+    for(size_t i = 0; i < 8; ++i)
+    {
+      Magick::Color c = work.p[j*work.stride + i];
+
+      if(work.output)
+        work.result.push_back(quantum_to_bits<8>(alpha(c)));
+
+      if(work.preview)
+      {
+        c.redQuantum(0);
+        c.greenQuantum(0);
+        c.blueQuantum(0);
+        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
+    }
+  }
+}
+
+void process_la44(WorkUnit &work)
+{
+  for(size_t j = 0; j < 8; ++j)
+  {
+    for(size_t i = 0; i < 8; ++i)
+    {
+      Magick::Color c = work.p[j*work.stride + i];
+
+      if(work.output)
+      {
+        work.result.push_back((quantum_to_bits<4>(luminance(c)) << 4)
+                            | (quantum_to_bits<4>(alpha(c))     << 0));
+      }
+
+      if(work.preview)
+      {
+        Magick::Quantum l = quantize<4>(luminance(c));
+
+        c.redQuantum(l);
+        c.greenQuantum(l);
+        c.blueQuantum(l);
+        c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+
+        work.p[j*work.stride + i] = c;
+      }
+    }
+  }
+}
+
+void process_l4(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -368,13 +499,36 @@ void output_l4(WorkUnit &work)
       Magick::Color c1 = work.p[j*work.stride + i+0],
                     c2 = work.p[j*work.stride + i+1];
 
-      work.result.push_back((quantum_to_bits<4>(luminance(c1)) << 0)
-                     | (quantum_to_bits<4>(luminance(c2)) << 4));
+      if(work.output)
+      {
+        work.result.push_back((quantum_to_bits<4>(luminance(c1)) << 0)
+                            | (quantum_to_bits<4>(luminance(c2)) << 4));
+      }
+
+      if(work.preview)
+      {
+        Magick::Quantum l = quantize<4>(luminance(c1));
+
+        c1.redQuantum(l);
+        c1.greenQuantum(l);
+        c1.blueQuantum(l);
+        c1.alphaQuantum(0);
+
+        l = quantize<4>(luminance(c2));
+
+        c2.redQuantum(l);
+        c2.greenQuantum(l);
+        c2.blueQuantum(l);
+        c2.alphaQuantum(0);
+
+        work.p[j*work.stride + i+0] = c1;
+        work.p[j*work.stride + i+1] = c2;
+      }
     }
   }
 }
 
-void output_a4(WorkUnit &work)
+void process_a4(WorkUnit &work)
 {
   for(size_t j = 0; j < 8; ++j)
   {
@@ -383,13 +537,32 @@ void output_a4(WorkUnit &work)
       Magick::Color c1 = work.p[j*work.stride + i+0],
                     c2 = work.p[j*work.stride + i+1];
 
-      work.result.push_back((quantum_to_bits<8>(alpha(c1)) << 0)
-                     | (quantum_to_bits<8>(alpha(c2)) << 4));
+      if(work.output)
+      {
+        work.result.push_back((quantum_to_bits<8>(alpha(c1)) << 0)
+                            | (quantum_to_bits<8>(alpha(c2)) << 4));
+      }
+
+      if(work.preview)
+      {
+        c1.redQuantum(0);
+        c1.greenQuantum(0);
+        c1.blueQuantum(0);
+        c1.alphaQuantum(quantize<4>(c1.alphaQuantum()));
+
+        c2.redQuantum(0);
+        c2.greenQuantum(0);
+        c2.blueQuantum(0);
+        c2.alphaQuantum(quantize<4>(c2.alphaQuantum()));
+
+        work.p[j*work.stride + i+0] = c1;
+        work.p[j*work.stride + i+1] = c2;
+      }
     }
   }
 }
 
-void output_etc1(WorkUnit &work)
+void process_etc1(WorkUnit &work)
 {
   rg_etc1::etc1_pack_params params;
   params.clear();
@@ -401,27 +574,54 @@ void output_etc1(WorkUnit &work)
       uint8_t in_block[4*4*4];
       uint8_t out_block[8];
 
-      for(size_t y = 0; y < 4; ++y)
+      if(work.output || work.preview)
       {
-        for(size_t x = 0; x < 4; ++x)
+        for(size_t y = 0; y < 4; ++y)
         {
-          Magick::Color c = work.p[(j+y)*work.stride + i + x];
+          for(size_t x = 0; x < 4; ++x)
+          {
+            Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-          in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-          in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-          in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
-          in_block[y*16 + x*4 + 3] = 0xFF;
+            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
+            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
+            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
+            in_block[y*16 + x*4 + 3] = 0xFF;
+          }
         }
+
+        rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
       }
 
-      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
-      for(size_t i = 0; i < 8; ++i)
-        work.result.push_back(out_block[8-i-1]);
+      if(work.output)
+      {
+        for(size_t i = 0; i < 8; ++i)
+          work.result.push_back(out_block[8-i-1]);
+      }
+
+      if(work.preview)
+      {
+        rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
+
+        for(size_t y = 0; y < 4; ++y)
+        {
+          for(size_t x = 0; x < 4; ++x)
+          {
+            Magick::Color c;
+
+            c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
+            c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
+            c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
+            c.alphaQuantum(0);
+
+            work.p[(j+y)*work.stride + i + x] = c;
+          }
+        }
+      }
     }
   }
 }
 
-void output_etc1a4(WorkUnit &work)
+void process_etc1a4(WorkUnit &work)
 {
   rg_etc1::etc1_pack_params params;
   params.clear();
@@ -434,428 +634,62 @@ void output_etc1a4(WorkUnit &work)
       uint8_t out_block[8];
       uint8_t out_alpha[8] = {0,0,0,0,0,0,0,0};
 
-      for(size_t y = 0; y < 4; ++y)
+      if(work.output || work.preview)
       {
-        for(size_t x = 0; x < 4; ++x)
+        for(size_t y = 0; y < 4; ++y)
         {
-          Magick::Color c = work.p[(j+y)*work.stride + i + x];
+          for(size_t x = 0; x < 4; ++x)
+          {
+            Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-          in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-          in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-          in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
-          in_block[y*16 + x*4 + 3] = 0xFF;
+            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
+            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
+            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
+            in_block[y*16 + x*4 + 3] = 0xFF;
 
-          if(y & 1)
-            out_alpha[2*x + y/2] |= (quantum_to_bits<4>(alpha(c)) << 4);
-          else
-            out_alpha[2*x + y/2] |= quantum_to_bits<4>(alpha(c));
+            if(work.output)
+            {
+              if(y & 1)
+                out_alpha[2*x + y/2] |= (quantum_to_bits<4>(alpha(c)) << 4);
+              else
+                out_alpha[2*x + y/2] |= quantum_to_bits<4>(alpha(c));
+            }
+          }
         }
+
+        rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
       }
 
-      for(size_t i = 0; i < 8; ++i)
-        work.result.push_back(out_alpha[i]);
-
-      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
-      for(size_t i = 0; i < 8; ++i)
-        work.result.push_back(out_block[8-i-1]);
-    }
-  }
-}
-
-void quantize_rgba8888(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<8>(c.redQuantum()));
-      c.greenQuantum(quantize<8>(c.greenQuantum()));
-      c.blueQuantum(quantize<8>(c.blueQuantum()));
-      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_rgb888(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<8>(c.redQuantum()));
-      c.greenQuantum(quantize<8>(c.greenQuantum()));
-      c.blueQuantum(quantize<8>(c.blueQuantum()));
-      c.alphaQuantum(0);
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_rgba5551(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<5>(c.redQuantum()));
-      c.greenQuantum(quantize<5>(c.greenQuantum()));
-      c.blueQuantum(quantize<5>(c.blueQuantum()));
-      c.alphaQuantum(quantize<1>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_rgb565(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<5>(c.redQuantum()));
-      c.greenQuantum(quantize<6>(c.greenQuantum()));
-      c.blueQuantum(quantize<5>(c.blueQuantum()));
-      c.alphaQuantum(0);
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_rgba4444(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<4>(c.redQuantum()));
-      c.greenQuantum(quantize<4>(c.greenQuantum()));
-      c.blueQuantum(quantize<4>(c.blueQuantum()));
-      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_la88(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-      Magick::Quantum l = quantize<8>(luminance(c));
-
-      c.redQuantum(l);
-      c.greenQuantum(l);
-      c.blueQuantum(l);
-      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_hilo88(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(quantize<8>(c.redQuantum()));
-      c.greenQuantum(quantize<8>(c.greenQuantum()));
-      c.blueQuantum(0);
-      c.alphaQuantum(0);
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_l8(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-      Magick::Quantum l = quantize<8>(luminance(c));
-
-      c.redQuantum(l);
-      c.greenQuantum(l);
-      c.blueQuantum(l);
-      c.alphaQuantum(0);
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_a8(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(0);
-      c.greenQuantum(0);
-      c.blueQuantum(0);
-      c.alphaQuantum(quantize<8>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_la44(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-      Magick::Quantum l = quantize<4>(luminance(c));
-
-      c.redQuantum(l);
-      c.greenQuantum(l);
-      c.blueQuantum(l);
-      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_l4(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-      Magick::Quantum l = quantize<4>(luminance(c));
-
-      c.redQuantum(l);
-      c.greenQuantum(l);
-      c.blueQuantum(l);
-      c.alphaQuantum(0);
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_a4(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  for(size_t j = 0; j < img.rows(); ++j)
-  {
-    for(size_t i = 0; i < img.columns(); ++i)
-    {
-      Magick::Color c(*p);
-
-      c.redQuantum(0);
-      c.greenQuantum(0);
-      c.blueQuantum(0);
-      c.alphaQuantum(quantize<4>(c.alphaQuantum()));
-
-      *p++ = c;
-    }
-  }
-
-  cache.sync();
-}
-
-void quantize_etc1(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  rg_etc1::etc1_pack_params params;
-  params.clear();
-
-  for(size_t j = 0; j < img.rows(); j += 4)
-  {
-    for(size_t i = 0; i < img.columns(); i += 4)
-    {
-      uint8_t in_block[4*4*4];
-      uint8_t out_block[8];
-
-      for(size_t y = 0; y < 4; ++y)
+      if(work.output)
       {
-        for(size_t x = 0; x < 4; ++x)
-        {
-          Magick::Color c(p[(j+y)*img.columns() + i + x]);
+        for(size_t i = 0; i < 8; ++i)
+          work.result.push_back(out_alpha[i]);
 
-          in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-          in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-          in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
-          in_block[y*16 + x*4 + 3] = 0xFF;
-        }
+        for(size_t i = 0; i < 8; ++i)
+          work.result.push_back(out_block[8-i-1]);
       }
 
-      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
-      rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
-
-      for(size_t y = 0; y < 4; ++y)
+      if(work.preview)
       {
-        for(size_t x = 0; x < 4; ++x)
+        rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
+
+        for(size_t y = 0; y < 4; ++y)
         {
-          Magick::Color c;
+          for(size_t x = 0; x < 4; ++x)
+          {
+            Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-          c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
-          c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
-          c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
-          c.alphaQuantum(0);
+            c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
+            c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
+            c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
+            c.alphaQuantum(quantize<4>(c.alphaQuantum()));
 
-          p[(j+y)*img.columns() + i + x] = c;
+            work.p[(j+y)*work.stride + i + x] = c;
+          }
         }
       }
     }
   }
-
-  cache.sync();
-}
-
-void quantize_etc1a4(Magick::Image &img)
-{
-  img.modifyImage();
-  Magick::Pixels cache(img);
-  Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
-
-  rg_etc1::etc1_pack_params params;
-  params.clear();
-
-  for(size_t j = 0; j < img.rows(); j += 4)
-  {
-    for(size_t i = 0; i < img.columns(); i += 4)
-    {
-      uint8_t in_block[4*4*4];
-      uint8_t out_block[8];
-
-      for(size_t y = 0; y < 4; ++y)
-      {
-        for(size_t x = 0; x < 4; ++x)
-        {
-          Magick::Color c(p[(j+y)*img.columns() + i + x]);
-
-          in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-          in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-          in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
-          in_block[y*16 + x*4 + 3] = 0xFF;
-        }
-      }
-
-      rg_etc1::pack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block), params);
-      rg_etc1::unpack_etc1_block(out_block, reinterpret_cast<unsigned int*>(in_block));
-
-      for(size_t y = 0; y < 4; ++y)
-      {
-        for(size_t x = 0; x < 4; ++x)
-        {
-          Magick::Color c(p[(j+y)*img.columns() + i + x]);
-
-          c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
-          c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
-          c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
-          c.alphaQuantum(quantize<4>(c.alphaQuantum()));
-
-          p[(j+y)*img.columns() + i + x] = c;
-        }
-      }
-    }
-  }
-
-  cache.sync();
 }
 
 std::queue<WorkUnit>          work_queue;
@@ -882,7 +716,7 @@ THREAD_RETURN_T work_thread(void *param)
     work_queue.pop();
     mutex.unlock();
 
-    work.output(work);
+    work.process(work);
 
     result_mutex.lock();
     result_queue.push(work);
@@ -895,82 +729,67 @@ THREAD_RETURN_T work_thread(void *param)
 
 void process_image(Magick::Image img)
 {
-  void (*output)(WorkUnit&);
-  void (*quantize)(Magick::Image&);
+  void (*process)(WorkUnit&);
   void* (*compress)(const void*,size_t,size_t*);
 
-  switch(output_format)
+  switch(process_format)
   {
     case RGBA8888:
-      output = output_rgba8888;
-      quantize = quantize_rgba8888;
+      process = process_rgba8888;
       break;
 
     case RGB888:
-      output = output_rgb888;
-      quantize = quantize_rgb888;
+      process = process_rgb888;
       break;
 
     case RGBA5551:
-      output = output_rgba5551;
-      quantize = quantize_rgba5551;
+      process = process_rgba5551;
       break;
 
     case RGB565:
-      output = output_rgb565;
-      quantize = quantize_rgb565;
+      process = process_rgb565;
       break;
 
     case RGBA4444:
-      output = output_rgba4444;
-      quantize = quantize_rgba4444;
+      process = process_rgba4444;
       break;
 
     case LA88:
-      output = output_la88;
-      quantize = quantize_la88;
+      process = process_la88;
       break;
 
     case HILO88:
-      output = output_hilo88;
-      quantize = quantize_hilo88;
+      process = process_hilo88;
       break;
 
     case L8:
-      output = output_l8;
-      quantize = quantize_l8;
+      process = process_l8;
       break;
 
     case A8:
-      output = output_a8;
-      quantize = quantize_a8;
+      process = process_a8;
       break;
 
     case LA44:
-      output = output_la44;
-      quantize = quantize_la44;
+      process = process_la44;
       break;
 
     case L4:
-      output = output_l4;
-      quantize = quantize_l4;
+      process = process_l4;
       break;
 
     case A4:
-      output = output_a4;
-      quantize = quantize_a4;
+      process = process_a4;
       break;
 
     case ETC1:
       rg_etc1::pack_etc1_block_init();
-      output = output_etc1;
-      quantize = quantize_etc1;
+      process = process_etc1;
       break;
 
     case ETC1A4:
       rg_etc1::pack_etc1_block_init();
-      output = output_etc1a4;
-      quantize = quantize_etc1a4;
+      process = process_etc1a4;
       break;
   }
 
@@ -1008,19 +827,10 @@ void process_image(Magick::Image img)
     preview_width = preview_width * 1.5;
   Magick::Image preview(Magick::Geometry(preview_width, img.rows()), transparent);
 
-  if(!preview_path.empty())
-  {
-    img.modifyImage();
-    quantize(img);
-    preview.composite(img, Magick::Geometry(0, 0, 0, 0), Magick::OverCompositeOp);
-  }
-
   if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
   {
     size_t width  = img.columns();
     size_t height = img.rows();
-    size_t hoff   = 0;
-    size_t woff   = width;
 
     while(width > 8 && height > 8)
     {
@@ -1032,29 +842,16 @@ void process_image(Magick::Image img)
       height = height / 2;
       img.resize(Magick::Geometry(width, height));
       img_queue.push(img);
-
-      if(!preview_path.empty())
-      {
-        img.modifyImage();
-        quantize(img);
-        preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
-      }
-
-      hoff += img.rows();
     }
   }
-
-  if(!preview_path.empty())
-    preview.write(preview_path);
-
-  if(output_path.empty())
-    return;
 
   std::vector<std::thread> workers;
   for(size_t i = 0; i < NUM_THREADS; ++i)
     workers.push_back(std::thread(work_thread, nullptr));
 
   Buffer buf;
+  size_t hoff = 0;
+  size_t woff = 0;
   while(!img_queue.empty())
   {
     img = img_queue.front();
@@ -1076,9 +873,11 @@ void process_image(Magick::Image img)
         WorkUnit work;
 
         work.sequence = num_work++;
-        work.p = p + j*img.columns() + i;
-        work.stride = img.columns();
-        work.output = output;
+        work.p        = p + j*img.columns() + i;
+        work.stride   = img.columns();
+        work.output   = !output_path.empty();
+        work.preview  = !preview_path.empty();
+        work.process  = process;
 
         work_mutex.lock();
         work_queue.push(work);
@@ -1109,7 +908,23 @@ void process_image(Magick::Image img)
 
       mutex.lock();
     }
+
+    cache.sync();
+
+    if(!preview_path.empty())
+    {
+      preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
+      hoff += img.rows();
+      if(woff == 0)
+      {
+        hoff = 0;
+        woff = img.columns();
+      }
+    }
   }
+
+  if(!preview_path.empty())
+    preview.write(preview_path);
 
   while(!workers.empty())
   {
@@ -1299,7 +1114,7 @@ int main(int argc, char *argv[])
         c = (c - 'A') + 'a';
       case '0' ... '9':
       case 'a' ... 'd':
-        output_format = static_cast<OutputFormat>(c);
+        process_format = static_cast<OutputFormat>(c);
         break;
 
       case 'h':
@@ -1384,9 +1199,6 @@ int main(int argc, char *argv[])
     print_usage(prog);
     return EXIT_FAILURE;
   }
-
-  if(output_path.empty())
-    output_path = std::string(argv[optind]) + ".bin";
 
   try
   {
