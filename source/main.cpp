@@ -256,10 +256,12 @@ void swizzle(Magick::PixelPacket *p)
 void swizzle(Magick::Image &img)
 {
   Magick::Pixels cache(img);
+  size_t         height = img.rows();
+  size_t         width  = img.columns();
 
-  for(size_t j = 0; j < img.rows(); j += 8)
+  for(size_t j = 0; j < height; j += 8)
   {
-    for(size_t i = 0; i < img.columns(); i += 8)
+    for(size_t i = 0; i < width; i += 8)
     {
       Magick::PixelPacket *p = cache.get(i, j, 8, 8);
       swizzle(p);
@@ -435,20 +437,20 @@ void process_image(Magick::Image img)
 
   using Magick::Quantum;
   static const Magick::Color transparent(0, 0, 0, QuantumRange);
+
   size_t preview_width  = img.columns();
   size_t preview_height = img.rows();
 
-  if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
+  if(filter_type != Magick::UndefinedFilter && preview_width > 8 && preview_height > 8)
   {
-    preview_width *= 1.5;
+    size_t width  = preview_width;
+    size_t height = preview_height;
 
-    size_t width  = img.columns();
-    size_t height = img.rows();
+    preview_width *= 1.5;
 
     while(width > 8 && height > 8)
     {
       img = img_queue.front();
-      img.modifyImage();
       img.filterType(filter_type);
 
       width  = width / 2;
@@ -475,10 +477,10 @@ void process_image(Magick::Image img)
     size_t width  = img.columns();
     size_t height = img.rows();
 
-    img.modifyImage();
     swizzle(img);
-    Magick::Pixels cache(img);
-    Magick::PixelPacket *p = cache.get(0, 0, img.columns(), img.rows());
+
+    Magick::Pixels      cache(img);
+    Magick::PixelPacket *p = cache.get(0, 0, width, height);
 
     uint64_t num_work = 0;
     for(size_t j = 0; j < height; j += 8)
@@ -488,8 +490,8 @@ void process_image(Magick::Image img)
         encode::WorkUnit work;
 
         work.sequence     = num_work++;
-        work.p            = p + j*img.columns() + i;
-        work.stride       = img.columns();
+        work.p            = p + j*width + i;
+        work.stride       = width;
         work.etc1_quality = etc1_quality;
         work.output       = !output_path.empty();
         work.preview      = !preview_path.empty();
@@ -530,11 +532,11 @@ void process_image(Magick::Image img)
     if(!preview_path.empty())
     {
       preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
-      hoff += img.rows();
+      hoff += height;
       if(woff == 0)
       {
         hoff = 0;
-        woff = img.columns();
+        woff = width;
       }
     }
   }
