@@ -220,7 +220,7 @@ Magick::Image load_image(const char *path)
   return img;
 }
 
-void swizzle(Magick::PixelPacket *p)
+void swizzle(Magick::PixelPacket *p, bool reverse)
 {
   static const unsigned char table[][4] =
   {
@@ -238,13 +238,27 @@ void swizzle(Magick::PixelPacket *p)
     { 47, 59, 61, 55, },
   };
 
-  for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
+  if(!reverse)
   {
-    Magick::PixelPacket tmp = p[table[i][0]];
-    p[table[i][0]]          = p[table[i][1]];
-    p[table[i][1]]          = p[table[i][2]];
-    p[table[i][2]]          = p[table[i][3]];
-    p[table[i][3]]          = tmp;
+    for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
+    {
+      Magick::PixelPacket tmp = p[table[i][0]];
+      p[table[i][0]]          = p[table[i][1]];
+      p[table[i][1]]          = p[table[i][2]];
+      p[table[i][2]]          = p[table[i][3]];
+      p[table[i][3]]          = tmp;
+    }
+  }
+  else
+  {
+    for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
+    {
+      Magick::PixelPacket tmp = p[table[i][3]];
+      p[table[i][3]]          = p[table[i][2]];
+      p[table[i][2]]          = p[table[i][1]];
+      p[table[i][1]]          = p[table[i][0]];
+      p[table[i][0]]          = tmp;
+    }
   }
 
   std::swap(p[12], p[18]);
@@ -253,7 +267,7 @@ void swizzle(Magick::PixelPacket *p)
   std::swap(p[45], p[51]);
 }
 
-void swizzle(Magick::Image &img)
+void swizzle(Magick::Image &img, bool reverse)
 {
   Magick::Pixels cache(img);
   size_t         height = img.rows();
@@ -264,11 +278,10 @@ void swizzle(Magick::Image &img)
     for(size_t i = 0; i < width; i += 8)
     {
       Magick::PixelPacket *p = cache.get(i, j, 8, 8);
-      swizzle(p);
+      swizzle(p, reverse);
+      cache.sync();
     }
   }
-
-  cache.sync();
 }
 
 std::queue<encode::WorkUnit>          work_queue;
@@ -477,7 +490,8 @@ void process_image(Magick::Image img)
     size_t width  = img.columns();
     size_t height = img.rows();
 
-    swizzle(img);
+    if(process_format != ETC1 && process_format != ETC1A4)
+      swizzle(img, false);
 
     Magick::Pixels      cache(img);
     Magick::PixelPacket *p = cache.get(0, 0, width, height);
@@ -531,6 +545,9 @@ void process_image(Magick::Image img)
 
     if(!preview_path.empty())
     {
+      if(process_format != ETC1 && process_format != ETC1A4)
+        swizzle(img, true);
+
       preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
       hoff += height;
       if(woff == 0)
