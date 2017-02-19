@@ -435,7 +435,8 @@ void process_image(Magick::Image img)
 
   using Magick::Quantum;
   static const Magick::Color transparent(0, 0, 0, QuantumRange);
-  size_t preview_width = img.columns();
+  size_t preview_width  = img.columns();
+  size_t preview_height = img.rows();
 
   if(filter_type != Magick::UndefinedFilter && img.columns() > 8 && img.rows() > 8)
   {
@@ -457,7 +458,7 @@ void process_image(Magick::Image img)
     }
   }
 
-  Magick::Image preview(Magick::Geometry(preview_width, img.rows()), transparent);
+  Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent);
 
   std::vector<std::thread> workers;
   for(size_t i = 0; i < NUM_THREADS; ++i)
