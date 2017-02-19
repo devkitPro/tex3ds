@@ -152,6 +152,22 @@ inline Magick::Color transparent()
   return Magick::Color(0, 0, 0, 0);
 }
 
+inline bool has_rgb(Magick::Image &img)
+{
+  Magick::Pixels cache(img);
+
+  if(img.hasChannel(Magick::RedPixelChannel)
+  && img.hasChannel(Magick::GreenPixelChannel)
+  && img.hasChannel(Magick::BluePixelChannel))
+    return true;
+
+  assert(cache.offset(Magick::RedPixelChannel) >= 0);
+  assert(cache.offset(Magick::GreenPixelChannel) >= 0);
+  assert(cache.offset(Magick::BluePixelChannel) >= 0);
+
+  return false;
+}
+
 }
 #else /* MagickLibVersion < 0x700 */
 typedef Magick::FilterTypes FilterType;
@@ -212,6 +228,11 @@ inline Magick::Color transparent()
 {
   using Magick::Quantum;
   return Magick::Color(0, 0, 0, QuantumRange);
+}
+
+inline bool has_rgb(Magick::Image &img)
+{
+  return true;
 }
 
 }

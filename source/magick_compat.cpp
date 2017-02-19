@@ -18,6 +18,7 @@
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
 #include "magick_compat.h"
+#include <cassert>
 
 #if MagickLibVersion >= 0x700
 /*------------------------------------------------------------------------------
@@ -40,7 +41,9 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Ref
     pixel[cache->red]   = other.pixel[other.cache->red];
     pixel[cache->green] = other.pixel[other.cache->green];
     pixel[cache->blue]  = other.pixel[other.cache->blue];
-    pixel[cache->alpha] = other.pixel[other.cache->alpha];
+
+    if(cache->alpha >= 0)
+      pixel[cache->alpha] = other.pixel[other.cache->alpha];
   }
 
   return *this;
@@ -57,7 +60,15 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference
   pixel[cache->red]   = other.pixel[other.cache->red];
   pixel[cache->green] = other.pixel[other.cache->green];
   pixel[cache->blue]  = other.pixel[other.cache->blue];
-  pixel[cache->alpha] = other.pixel[other.cache->alpha];
+
+  if(cache->alpha >= 0)
+  {
+    using Magick::Quantum;
+    if(other.cache->alpha >= 0)
+      pixel[cache->alpha] = other.pixel[other.cache->alpha];
+    else
+      pixel[cache->alpha] = QuantumRange;
+  }
 
   return *this;
 }
@@ -68,17 +79,20 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(const Magick::Color &c
   pixel[cache->red]   = quantumRed(c);
   pixel[cache->green] = quantumGreen(c);
   pixel[cache->blue]  = quantumBlue(c);
-  pixel[cache->alpha] = quantumAlpha(c);
+
+  if(cache->alpha >= 0)
+    pixel[cache->alpha] = quantumAlpha(c);
 
   return *this;
 }
 
 PixelPacket::Reference::operator Magick::Color() const
 {
+  using Magick::Quantum;
   return Magick::Color(pixel[cache->red],
                        pixel[cache->green],
                        pixel[cache->blue],
-                       pixel[cache->alpha]);
+                       cache->alpha >= 0 ? pixel[cache->alpha] : QuantumRange);
 }
 /*------------------------------------------------------------------------------
  * PixelPacket
@@ -160,7 +174,11 @@ Pixels::Pixels(Magick::Image &img)
   blue(cache.offset(Magick::BluePixelChannel)),
   alpha(cache.offset(Magick::AlphaPixelChannel)),
   stride(img.channels())
-{ }
+{
+  assert(red >= 0);
+  assert(green >= 0);
+  assert(blue >= 0);
+}
 
 PixelPacket Pixels::get(ssize_t x, ssize_t y, size_t w, size_t h)
 {

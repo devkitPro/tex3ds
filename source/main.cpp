@@ -193,6 +193,20 @@ Magick::Image load_image(const char *path)
   Magick::Image img(path);
   img.comment(path);
 
+  switch(img.colorSpace())
+  {
+    case Magick::RGBColorspace:
+    case Magick::sRGBColorspace:
+      break;
+
+    default:
+      img.colorSpace(Magick::RGBColorspace);
+      break;
+  }
+
+  if(!has_rgb(img))
+    throw std::runtime_error("No RGB information");
+
   switch(img.columns())
   {
     case    8: case   16: case   32: case   64:
@@ -200,8 +214,7 @@ Magick::Image load_image(const char *path)
       break;
 
     default:
-      std::fprintf(stderr, "%s: invalid width '%zu'\n",
-                   path, img.columns());
+      throw std::runtime_error("Invalid width");
   }
 
   switch(img.rows())
@@ -211,8 +224,7 @@ Magick::Image load_image(const char *path)
       break;
 
     default:
-      std::fprintf(stderr, "%s: invalid height '%zu'\n",
-                   path, img.rows());
+      throw std::runtime_error("Invalid height");
   }
 
   img.page(Magick::Geometry(img.columns(), img.rows()));
