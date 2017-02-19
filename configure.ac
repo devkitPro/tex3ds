@@ -16,12 +16,14 @@ AC_LANG_PUSH([C])
 AX_CHECK_COMPILE_FLAG([-Wall],    [CFLAGS+=" -Wall"])
 AX_CHECK_COMPILE_FLAG([-std=c99], [CFLAGS+=" -std=c99"])
 AX_CHECK_COMPILE_FLAG([-pthread], [CFLAGS+=" -pthread"])
+AX_CHECK_COMPILE_FLAG([-flto],    [CFLAGS+=" -flto"])
 AC_LANG_POP()
 
 AC_LANG_PUSH([C++])
 AX_CHECK_COMPILE_FLAG([-Wall],      [CXXFLAGS+=" -Wall"])
 AX_CHECK_COMPILE_FLAG([-std=c++11], [CXXFLAGS+=" -std=c++11"])
 AX_CHECK_COMPILE_FLAG([-pthread],   [CXXFLAGS+=" -pthread"])
+AX_CHECK_COMPILE_FLAG([-flto],      [CXXFLAGS+=" -flto"])
 AC_LANG_POP()
 
 # Checks for libraries.
