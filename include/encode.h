@@ -18,10 +18,10 @@
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
 #pragma once
-#include <cstdint>
-#include <vector>
-#include <Magick++.h>
+#include "compat.h"
+#include "magick_compat.h"
 #include "rg_etc1.h"
+#include <vector>
 
 namespace encode
 {
@@ -32,12 +32,24 @@ struct WorkUnit
 {
   Buffer                result;
   uint64_t              sequence;
-  Magick::PixelPacket   *p;
+  PixelPacket           p;
   size_t                stride;
   rg_etc1::etc1_quality etc1_quality;
   bool                  output;
   bool                  preview;
   void                  (*process)(WorkUnit&);
+
+  WorkUnit(uint64_t sequence, PixelPacket p, size_t stride,
+           rg_etc1::etc1_quality etc1_quality, bool output, bool preview,
+           void (*process)(WorkUnit&))
+  : sequence(sequence),
+    p(p),
+    stride(stride),
+    etc1_quality(etc1_quality),
+    output(output),
+    preview(preview),
+    process(process)
+  { }
 
   bool operator<(const WorkUnit &other) const
   {

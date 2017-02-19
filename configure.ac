@@ -27,7 +27,7 @@ AX_CHECK_COMPILE_FLAG([-flto],      [CXXFLAGS+=" -flto"])
 AC_LANG_POP()
 
 # Checks for libraries.
-PKG_CHECK_MODULES(ImageMagick, [Magick++ >= 6.0.0 Magick++ < 7.0.0])
+PKG_CHECK_MODULES(ImageMagick, [Magick++ >= 6.0.0])
 
 # Checks for header files.
 AC_CHECK_HEADERS([limits.h stddef.h stdint.h stdlib.h string.h unistd.h])

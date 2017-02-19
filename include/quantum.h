@@ -18,6 +18,7 @@
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
 #pragma once
+#include "magick_compat.h"
 
 namespace
 {
@@ -65,17 +66,16 @@ inline Magick::Quantum luminance(const Magick::Color &c)
 
   using Magick::Quantum;
 
-  double v = gamma(r * gamma_inverse(static_cast<double>(c.redQuantum())   / QuantumRange)
-                 + g * gamma_inverse(static_cast<double>(c.greenQuantum()) / QuantumRange)
-                 + b * gamma_inverse(static_cast<double>(c.blueQuantum())  / QuantumRange));
+  double v = gamma(r * gamma_inverse(static_cast<double>(quantumRed(c))   / QuantumRange)
+                 + g * gamma_inverse(static_cast<double>(quantumGreen(c)) / QuantumRange)
+                 + b * gamma_inverse(static_cast<double>(quantumBlue(c))  / QuantumRange));
 
   return std::max(0.0, std::min(1.0, v)) * QuantumRange;
 }
 
 inline Magick::Quantum alpha(const Magick::Color &c)
 {
-  using Magick::Quantum;
-  return QuantumRange - c.alphaQuantum();
+  return quantumAlpha(c);
 }
 
 }

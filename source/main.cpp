@@ -18,8 +18,11 @@
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
 #include "compat.h"
+#include "compress.h"
 #include "encode.h"
+#include "magick_compat.h"
 #include "quantum.h"
+#include "rg_etc1.h"
 #include "thread.h"
 #include <algorithm>
 #include <cmath>
@@ -28,10 +31,7 @@
 #include <queue>
 #include <stdexcept>
 #include <vector>
-#include <Magick++.h>
 #include <getopt.h>
-#include "compress.h"
-#include "rg_etc1.h"
 
 #define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
 
@@ -143,8 +143,8 @@ CompressionFormatString *compression_format_strings_end =
 
 struct FilterTypeString
 {
-  const char          *str;
-  Magick::FilterTypes type;
+  const char *str;
+  FilterType type;
 
   bool operator<(const char *str) const
   {
@@ -186,7 +186,7 @@ struct FilterTypeString
 FilterTypeString *filter_type_strings_end =
   filter_type_strings + ARRAY_COUNT(filter_type_strings);
  
-Magick::FilterTypes filter_type = Magick::UndefinedFilter;
+FilterType filter_type = Magick::UndefinedFilter;
 
 Magick::Image load_image(const char *path)
 {
@@ -220,7 +220,7 @@ Magick::Image load_image(const char *path)
   return img;
 }
 
-void swizzle(Magick::PixelPacket *p, bool reverse)
+void swizzle(PixelPacket p, bool reverse)
 {
   static const unsigned char table[][4] =
   {
@@ -242,50 +242,50 @@ void swizzle(Magick::PixelPacket *p, bool reverse)
   {
     for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
     {
-      Magick::PixelPacket tmp = p[table[i][0]];
-      p[table[i][0]]          = p[table[i][1]];
-      p[table[i][1]]          = p[table[i][2]];
-      p[table[i][2]]          = p[table[i][3]];
-      p[table[i][3]]          = tmp;
+      Magick::Color tmp = p[table[i][0]];
+      p[table[i][0]]    = p[table[i][1]];
+      p[table[i][1]]    = p[table[i][2]];
+      p[table[i][2]]    = p[table[i][3]];
+      p[table[i][3]]    = tmp;
     }
   }
   else
   {
     for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
     {
-      Magick::PixelPacket tmp = p[table[i][3]];
-      p[table[i][3]]          = p[table[i][2]];
-      p[table[i][2]]          = p[table[i][1]];
-      p[table[i][1]]          = p[table[i][0]];
-      p[table[i][0]]          = tmp;
+      Magick::Color tmp = p[table[i][3]];
+      p[table[i][3]] = p[table[i][2]];
+      p[table[i][2]] = p[table[i][1]];
+      p[table[i][1]] = p[table[i][0]];
+      p[table[i][0]] = tmp;
     }
   }
 
-  std::swap(p[12], p[18]);
-  std::swap(p[13], p[19]);
-  std::swap(p[44], p[50]);
-  std::swap(p[45], p[51]);
+  swapPixel(p[12], p[18]);
+  swapPixel(p[13], p[19]);
+  swapPixel(p[44], p[50]);
+  swapPixel(p[45], p[51]);
 }
 
 void swizzle(Magick::Image &img, bool reverse)
 {
-  Magick::Pixels cache(img);
-  size_t         height = img.rows();
-  size_t         width  = img.columns();
+  Pixels cache(img);
+  size_t height = img.rows();
+  size_t width  = img.columns();
 
   for(size_t j = 0; j < height; j += 8)
   {
     for(size_t i = 0; i < width; i += 8)
     {
-      Magick::PixelPacket *p = cache.get(i, j, 8, 8);
+      PixelPacket p = cache.get(i, j, 8, 8);
       swizzle(p, reverse);
       cache.sync();
     }
   }
 }
 
-std::queue<encode::WorkUnit>          work_queue;
-std::priority_queue<encode::WorkUnit> result_queue;
+std::queue<encode::WorkUnit>  work_queue;
+std::vector<encode::WorkUnit> result_queue;
 
 std::condition_variable work_cond;
 std::condition_variable result_cond;
@@ -311,7 +311,8 @@ THREAD_RETURN_T work_thread(void *param)
     work.process(work);
 
     result_mutex.lock();
-    result_queue.push(work);
+    result_queue.push_back(work);
+    std::push_heap(result_queue.begin(), result_queue.end());
     result_cond.notify_one();
     result_mutex.unlock();
 
@@ -322,14 +323,14 @@ THREAD_RETURN_T work_thread(void *param)
 template<int bits>
 bool has_alpha(Magick::Image &img)
 {
-  Magick::Pixels cache(img);
-  const Magick::PixelPacket *p = cache.getConst(0, 0, img.columns(), img.rows());
+  Pixels      cache(img);
+  PixelPacket p = cache.get(0, 0, img.columns(), img.rows());
 
   size_t num = img.rows() * img.columns();
   for(size_t i = 0; i < num; ++i)
   {
     Magick::Color c = *p++;
-    if(quantum_to_bits<bits>(c.alphaQuantum()))
+    if(quantum_to_bits<bits>(quantumAlpha(c)))
       return true;
   }
 
@@ -448,9 +449,6 @@ void process_image(Magick::Image img)
   std::queue<Magick::Image> img_queue;
   img_queue.push(img);
 
-  using Magick::Quantum;
-  static const Magick::Color transparent(0, 0, 0, QuantumRange);
-
   size_t preview_width  = img.columns();
   size_t preview_height = img.rows();
 
@@ -473,7 +471,7 @@ void process_image(Magick::Image img)
     }
   }
 
-  Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent);
+  Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent());
 
   std::vector<std::thread> workers;
   for(size_t i = 0; i < NUM_THREADS; ++i)
@@ -493,23 +491,21 @@ void process_image(Magick::Image img)
     if(process_format != ETC1 && process_format != ETC1A4)
       swizzle(img, false);
 
-    Magick::Pixels      cache(img);
-    Magick::PixelPacket *p = cache.get(0, 0, width, height);
+    Pixels      cache(img);
+    PixelPacket p = cache.get(0, 0, img.columns(), img.rows());
 
     uint64_t num_work = 0;
     for(size_t j = 0; j < height; j += 8)
     {
       for(size_t i = 0; i < width; i += 8)
       {
-        encode::WorkUnit work;
-
-        work.sequence     = num_work++;
-        work.p            = p + j*width + i;
-        work.stride       = width;
-        work.etc1_quality = etc1_quality;
-        work.output       = !output_path.empty();
-        work.preview      = !preview_path.empty();
-        work.process      = process;
+        encode::WorkUnit work(num_work++,
+                              p + (j*width + i),
+                              width,
+                              etc1_quality,
+                              !output_path.empty(),
+                              !preview_path.empty(),
+                              process);
 
         work_mutex.lock();
         work_queue.push(work);
@@ -529,14 +525,16 @@ void process_image(Magick::Image img)
     for(uint64_t num_result = 0; num_result < num_work; ++num_result)
     {
       std::unique_lock<std::mutex> mutex(result_mutex);
-      while(result_queue.empty() || result_queue.top().sequence != num_result)
+      while(result_queue.empty() || result_queue.front().sequence != num_result)
         result_cond.wait(mutex);
 
-      encode::WorkUnit work = result_queue.top();
-      result_queue.pop();
+      encode::Buffer result;
+      std::pop_heap(result_queue.begin(), result_queue.end());
+      result.swap(result_queue.back().result);
+      result_queue.pop_back();
       mutex.unlock();
 
-      buf.insert(buf.end(), work.result.begin(), work.result.end());
+      buf.insert(buf.end(), result.begin(), result.end());
 
       mutex.lock();
     }

@@ -35,17 +35,17 @@ void rgba8888(WorkUnit &work)
       if(work.output)
       {
         work.result.push_back(quantum_to_bits<8>(alpha(c)));
-        work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
-        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+        work.result.push_back(quantum_to_bits<8>(quantumBlue(c)));
+        work.result.push_back(quantum_to_bits<8>(quantumGreen(c)));
+        work.result.push_back(quantum_to_bits<8>(quantumRed(c)));
       }
 
       if(work.preview)
       {
-        c.redQuantum(quantize<8>(c.redQuantum()));
-        c.greenQuantum(quantize<8>(c.greenQuantum()));
-        c.blueQuantum(quantize<8>(c.blueQuantum()));
-        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+        quantumRed(c,   quantize<8>(quantumRed(c)));
+        quantumGreen(c, quantize<8>(quantumGreen(c)));
+        quantumBlue(c,  quantize<8>(quantumBlue(c)));
+        quantumAlpha(c, quantize<8>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -63,17 +63,19 @@ void rgb888(WorkUnit &work)
 
       if(work.output)
       {
-        work.result.push_back(quantum_to_bits<8>(c.blueQuantum()));
-        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+        work.result.push_back(quantum_to_bits<8>(quantumBlue(c)));
+        work.result.push_back(quantum_to_bits<8>(quantumGreen(c)));
+        work.result.push_back(quantum_to_bits<8>(quantumRed(c)));
       }
 
       if(work.preview)
       {
-        c.redQuantum(quantize<8>(c.redQuantum()));
-        c.greenQuantum(quantize<8>(c.greenQuantum()));
-        c.blueQuantum(quantize<8>(c.blueQuantum()));
-        c.alphaQuantum(0);
+        using Magick::Quantum;
+
+        quantumRed(c,   quantize<8>(quantumRed(c)));
+        quantumGreen(c, quantize<8>(quantumGreen(c)));
+        quantumBlue(c,  quantize<8>(quantumBlue(c)));
+        quantumAlpha(c, QuantumRange);
 
         work.p[j*work.stride + i] = c;
       }
@@ -91,10 +93,10 @@ void rgba5551(WorkUnit &work)
 
       if(work.output)
       {
-        unsigned int v = (quantum_to_bits<5>(c.redQuantum())   << 11)
-                       | (quantum_to_bits<5>(c.greenQuantum()) <<  6)
-                       | (quantum_to_bits<5>(c.blueQuantum())  <<  1)
-                       | (quantum_to_bits<1>(alpha(c))         <<  0);
+        uint16_t v = (quantum_to_bits<5>(quantumRed(c))   << 11)
+                   | (quantum_to_bits<5>(quantumGreen(c)) <<  6)
+                   | (quantum_to_bits<5>(quantumBlue(c))  <<  1)
+                   | (quantum_to_bits<1>(alpha(c))        <<  0);
 
         work.result.push_back(v >> 0);
         work.result.push_back(v >> 8);
@@ -102,10 +104,10 @@ void rgba5551(WorkUnit &work)
 
       if(work.preview)
       {
-        c.redQuantum(quantize<5>(c.redQuantum()));
-        c.greenQuantum(quantize<5>(c.greenQuantum()));
-        c.blueQuantum(quantize<5>(c.blueQuantum()));
-        c.alphaQuantum(quantize<1>(c.alphaQuantum()));
+        quantumRed(c,   quantize<5>(quantumRed(c)));
+        quantumGreen(c, quantize<5>(quantumGreen(c)));
+        quantumBlue(c,  quantize<5>(quantumBlue(c)));
+        quantumAlpha(c, quantize<1>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -123,9 +125,9 @@ void rgb565(WorkUnit &work)
 
       if(work.output)
       {
-        unsigned int v = (quantum_to_bits<5>(c.redQuantum())   << 11)
-                       | (quantum_to_bits<6>(c.greenQuantum()) <<  5)
-                       | (quantum_to_bits<5>(c.blueQuantum())  <<  0);
+        uint16_t v = (quantum_to_bits<5>(quantumRed(c))   << 11)
+                   | (quantum_to_bits<6>(quantumGreen(c)) <<  5)
+                   | (quantum_to_bits<5>(quantumBlue(c))  <<  0);
 
         work.result.push_back(v >> 0);
         work.result.push_back(v >> 8);
@@ -133,10 +135,12 @@ void rgb565(WorkUnit &work)
 
       if(work.preview)
       {
-        c.redQuantum(quantize<5>(c.redQuantum()));
-        c.greenQuantum(quantize<6>(c.greenQuantum()));
-        c.blueQuantum(quantize<5>(c.blueQuantum()));
-        c.alphaQuantum(0);
+        using Magick::Quantum;
+
+        quantumRed(c,   quantize<5>(quantumRed(c)));
+        quantumGreen(c, quantize<6>(quantumGreen(c)));
+        quantumBlue(c,  quantize<5>(quantumBlue(c)));
+        quantumAlpha(c, QuantumRange);
 
         work.p[j*work.stride + i] = c;
       }
@@ -154,10 +158,10 @@ void rgba4444(WorkUnit &work)
 
       if(work.output)
       {
-        unsigned int v = (quantum_to_bits<4>(alpha(c))         <<  0)
-                       | (quantum_to_bits<4>(c.blueQuantum())  <<  4)
-                       | (quantum_to_bits<4>(c.greenQuantum()) <<  8)
-                       | (quantum_to_bits<4>(c.redQuantum())   << 12);
+        uint16_t v = (quantum_to_bits<4>(quantumRed(c))   << 12)
+                   | (quantum_to_bits<4>(quantumGreen(c)) <<  8)
+                   | (quantum_to_bits<4>(quantumBlue(c))  <<  4)
+                   | (quantum_to_bits<4>(alpha(c))        <<  0);
 
         work.result.push_back(v >> 0);
         work.result.push_back(v >> 8);
@@ -165,10 +169,10 @@ void rgba4444(WorkUnit &work)
 
       if(work.preview)
       {
-        c.redQuantum(quantize<4>(c.redQuantum()));
-        c.greenQuantum(quantize<4>(c.greenQuantum()));
-        c.blueQuantum(quantize<4>(c.blueQuantum()));
-        c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+        quantumRed(c,   quantize<4>(quantumRed(c)));
+        quantumGreen(c, quantize<4>(quantumGreen(c)));
+        quantumBlue(c,  quantize<4>(quantumBlue(c)));
+        quantumAlpha(c, quantize<4>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -194,10 +198,10 @@ void la88(WorkUnit &work)
       {
         Magick::Quantum l = quantize<8>(luminance(c));
 
-        c.redQuantum(l);
-        c.greenQuantum(l);
-        c.blueQuantum(l);
-        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+        quantumRed(c,   l);
+        quantumGreen(c, l);
+        quantumBlue(c,  l);
+        quantumAlpha(c, quantize<8>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -215,16 +219,18 @@ void hilo88(WorkUnit &work)
 
       if(work.output)
       {
-        work.result.push_back(quantum_to_bits<8>(c.greenQuantum()));
-        work.result.push_back(quantum_to_bits<8>(c.redQuantum()));
+        work.result.push_back(quantum_to_bits<8>(quantumGreen(c)));
+        work.result.push_back(quantum_to_bits<8>(quantumRed(c)));
       }
 
       if(work.preview)
       {
-        c.redQuantum(quantize<8>(c.redQuantum()));
-        c.greenQuantum(quantize<8>(c.greenQuantum()));
-        c.blueQuantum(0);
-        c.alphaQuantum(0);
+        using Magick::Quantum;
+
+        quantumRed(c,   quantize<8>(quantumRed(c)));
+        quantumGreen(c, quantize<8>(quantumGreen(c)));
+        quantumBlue(c,  0);
+        quantumAlpha(c, QuantumRange);
 
         work.p[j*work.stride + i] = c;
       }
@@ -247,10 +253,12 @@ void l8(WorkUnit &work)
       {
         Magick::Quantum l = quantize<8>(luminance(c));
 
-        c.redQuantum(l);
-        c.greenQuantum(l);
-        c.blueQuantum(l);
-        c.alphaQuantum(0);
+        using Magick::Quantum;
+
+        quantumRed(c,   l);
+        quantumGreen(c, l);
+        quantumBlue(c,  l);
+        quantumAlpha(c, QuantumRange);
 
         work.p[j*work.stride + i] = c;
       }
@@ -271,10 +279,10 @@ void a8(WorkUnit &work)
 
       if(work.preview)
       {
-        c.redQuantum(0);
-        c.greenQuantum(0);
-        c.blueQuantum(0);
-        c.alphaQuantum(quantize<8>(c.alphaQuantum()));
+        quantumRed(c,   0);
+        quantumGreen(c, 0);
+        quantumBlue(c,  0);
+        quantumAlpha(c, quantize<8>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -300,10 +308,10 @@ void la44(WorkUnit &work)
       {
         Magick::Quantum l = quantize<4>(luminance(c));
 
-        c.redQuantum(l);
-        c.greenQuantum(l);
-        c.blueQuantum(l);
-        c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+        quantumRed(c,   l);
+        quantumGreen(c, l);
+        quantumBlue(c,  l);
+        quantumAlpha(c, quantize<4>(quantumAlpha(c)));
 
         work.p[j*work.stride + i] = c;
       }
@@ -322,25 +330,27 @@ void l4(WorkUnit &work)
 
       if(work.output)
       {
-        work.result.push_back((quantum_to_bits<4>(luminance(c1)) << 0)
-                            | (quantum_to_bits<4>(luminance(c2)) << 4));
+        work.result.push_back((quantum_to_bits<4>(luminance(c2)) << 4)
+                            | (quantum_to_bits<4>(luminance(c1)) << 0));
       }
 
       if(work.preview)
       {
         Magick::Quantum l = quantize<4>(luminance(c1));
 
-        c1.redQuantum(l);
-        c1.greenQuantum(l);
-        c1.blueQuantum(l);
-        c1.alphaQuantum(0);
+        using Magick::Quantum;
+
+        quantumRed(c1,   l);
+        quantumGreen(c1, l);
+        quantumBlue(c1,  l);
+        quantumAlpha(c1, QuantumRange);
 
         l = quantize<4>(luminance(c2));
 
-        c2.redQuantum(l);
-        c2.greenQuantum(l);
-        c2.blueQuantum(l);
-        c2.alphaQuantum(0);
+        quantumRed(c2,   l);
+        quantumGreen(c2, l);
+        quantumBlue(c2,  l);
+        quantumAlpha(c2, QuantumRange);
 
         work.p[j*work.stride + i+0] = c1;
         work.p[j*work.stride + i+1] = c2;
@@ -360,21 +370,21 @@ void a4(WorkUnit &work)
 
       if(work.output)
       {
-        work.result.push_back((quantum_to_bits<8>(alpha(c1)) << 0)
-                            | (quantum_to_bits<8>(alpha(c2)) << 4));
+        work.result.push_back((quantum_to_bits<4>(alpha(c2)) << 4)
+                            | (quantum_to_bits<4>(alpha(c1)) << 0));
       }
 
       if(work.preview)
       {
-        c1.redQuantum(0);
-        c1.greenQuantum(0);
-        c1.blueQuantum(0);
-        c1.alphaQuantum(quantize<4>(c1.alphaQuantum()));
+        quantumRed(c1,   0);
+        quantumGreen(c1, 0);
+        quantumBlue(c1,  0);
+        quantumAlpha(c1, quantize<4>(quantumAlpha(c1)));
 
-        c2.redQuantum(0);
-        c2.greenQuantum(0);
-        c2.blueQuantum(0);
-        c2.alphaQuantum(quantize<4>(c2.alphaQuantum()));
+        quantumRed(c2,   0);
+        quantumGreen(c2, 0);
+        quantumBlue(c2,  0);
+        quantumAlpha(c2, quantize<4>(quantumAlpha(c2)));
 
         work.p[j*work.stride + i+0] = c1;
         work.p[j*work.stride + i+1] = c2;
@@ -404,9 +414,9 @@ void etc1(WorkUnit &work)
           {
             Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
+            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(quantumRed(c));
+            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(quantumGreen(c));
+            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(quantumBlue(c));
             in_block[y*16 + x*4 + 3] = 0xFF;
           }
         }
@@ -430,10 +440,12 @@ void etc1(WorkUnit &work)
           {
             Magick::Color c;
 
-            c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
-            c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
-            c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
-            c.alphaQuantum(0);
+            using Magick::Quantum;
+
+            quantumRed(c,   bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
+            quantumGreen(c, bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
+            quantumBlue(c,  bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
+            quantumAlpha(c, QuantumRange);
 
             work.p[(j+y)*work.stride + i + x] = c;
           }
@@ -465,9 +477,9 @@ void etc1a4(WorkUnit &work)
           {
             Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(c.redQuantum());
-            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(c.greenQuantum());
-            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(c.blueQuantum());
+            in_block[y*16 + x*4 + 0] = quantum_to_bits<8>(quantumRed(c));
+            in_block[y*16 + x*4 + 1] = quantum_to_bits<8>(quantumGreen(c));
+            in_block[y*16 + x*4 + 2] = quantum_to_bits<8>(quantumBlue(c));
             in_block[y*16 + x*4 + 3] = 0xFF;
 
             if(work.output)
@@ -475,7 +487,7 @@ void etc1a4(WorkUnit &work)
               if(y & 1)
                 out_alpha[2*x + y/2] |= (quantum_to_bits<4>(alpha(c)) << 4);
               else
-                out_alpha[2*x + y/2] |= quantum_to_bits<4>(alpha(c));
+                out_alpha[2*x + y/2] |= (quantum_to_bits<4>(alpha(c)) << 0);
             }
           }
         }
@@ -502,10 +514,10 @@ void etc1a4(WorkUnit &work)
           {
             Magick::Color c = work.p[(j+y)*work.stride + i + x];
 
-            c.redQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
-            c.greenQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
-            c.blueQuantum(bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
-            c.alphaQuantum(quantize<4>(c.alphaQuantum()));
+            quantumRed(c,   bits_to_quantum<8>(in_block[y*16 + x*4 + 0]));
+            quantumGreen(c, bits_to_quantum<8>(in_block[y*16 + x*4 + 1]));
+            quantumBlue(c,  bits_to_quantum<8>(in_block[y*16 + x*4 + 2]));
+            quantumAlpha(c, quantize<4>(quantumAlpha(c)));
 
             work.p[(j+y)*work.stride + i + x] = c;
           }
