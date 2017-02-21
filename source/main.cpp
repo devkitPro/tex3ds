@@ -185,13 +185,19 @@ struct FilterTypeString
 };
 FilterTypeString *filter_type_strings_end =
   filter_type_strings + ARRAY_COUNT(filter_type_strings);
- 
+
 FilterType filter_type = Magick::UndefinedFilter;
 
-Magick::Image load_image(const char *path)
+enum CubemapType
+{
+  CUBEMAP_NONE,
+  CUBEMAP_CUBE,
+  CUBEMAP_SKYBOX,
+} cubemap_type = CUBEMAP_NONE;
+
+std::vector<Magick::Image> load_image(const char *path)
 {
   Magick::Image img(path);
-  img.comment(path);
 
   switch(img.colorSpace())
   {
@@ -207,7 +213,18 @@ Magick::Image load_image(const char *path)
   if(!has_rgb(img))
     throw std::runtime_error("No RGB information");
 
-  switch(img.columns())
+  double width  = img.columns();
+  double height = img.rows();
+
+  if(cubemap_type != CUBEMAP_NONE)
+  {
+    width  /= 4.0;
+    height /= 3.0;
+  }
+
+  if(width != static_cast<size_t>(width))
+      throw std::runtime_error("Invalid width");
+  switch(static_cast<size_t>(width))
   {
     case    8: case   16: case   32: case   64:
     case  128: case  256: case  512: case 1024:
@@ -217,7 +234,9 @@ Magick::Image load_image(const char *path)
       throw std::runtime_error("Invalid width");
   }
 
-  switch(img.rows())
+  if(height != static_cast<size_t>(height))
+      throw std::runtime_error("Invalid height");
+  switch(static_cast<size_t>(height))
   {
     case    8: case   16: case   32: case   64:
     case  128: case  256: case  512: case 1024:
@@ -229,7 +248,79 @@ Magick::Image load_image(const char *path)
 
   img.page(Magick::Geometry(img.columns(), img.rows()));
 
-  return img;
+  std::vector<Magick::Image> result;
+  if(cubemap_type == CUBEMAP_NONE)
+  {
+    img.comment("");
+    result.push_back(img);
+  }
+  else
+  {
+    Magick::Image copy;
+
+    // +x
+    copy = img;
+    copy.crop(Magick::Geometry(width, height, 2*width, height));
+    if(cubemap_type == CUBEMAP_SKYBOX)
+      copy.flop(); // flip horizontal
+    copy.flip(); // flip vertical
+    copy.comment("px_");
+    copy.write("test.png");
+    result.push_back(copy);
+
+    // -x
+    copy = img;
+    copy.crop(Magick::Geometry(width, height, 0, height));
+    if(cubemap_type == CUBEMAP_SKYBOX)
+      copy.flop(); // flip horizontal
+    copy.flip(); // flip vertical
+    copy.comment("nx_");
+    result.push_back(copy);
+
+    // +y
+    copy = img;
+    copy.crop(Magick::Geometry(width, height, width, 0));
+    if(cubemap_type == CUBEMAP_CUBE)
+      copy.flip(); // flip vertical
+    copy.comment("py_");
+    result.push_back(copy);
+
+    // -y
+    copy = img;
+    copy.crop(Magick::Geometry(width, height, width, height*2));
+    if(cubemap_type == CUBEMAP_CUBE)
+      copy.flip(); // flip vertical
+    copy.comment("ny_");
+    result.push_back(copy);
+
+    // +z
+    copy = img;
+    if(cubemap_type == CUBEMAP_CUBE)
+      copy.crop(Magick::Geometry(width, height, width, height));
+    else
+    {
+      copy.crop(Magick::Geometry(width, height, width*3, height));
+      copy.flop(); // flip horizontal
+    }
+    copy.flip(); // flip vertical
+    copy.comment("pz_");
+    result.push_back(copy);
+
+    // -z
+    copy = img;
+    if(cubemap_type == CUBEMAP_CUBE)
+      copy.crop(Magick::Geometry(width, height, width*3, height));
+    else
+    {
+      copy.crop(Magick::Geometry(width, height, width, height));
+      copy.flop(); // flip horizontal
+    }
+    copy.flip(); // flip vertical
+    copy.comment("nz_");
+    result.push_back(copy);
+  }
+
+  return result;
 }
 
 void swizzle(PixelPacket p, bool reverse)
@@ -349,8 +440,17 @@ bool has_alpha(Magick::Image &img)
   return false;
 }
 
+std::string add_prefix(std::string path, std::string prefix)
+{
+  size_t pos = path.rfind('/');
+  if(pos != std::string::npos)
+    return path.substr(0, pos+1) + prefix + path.substr(pos+1);
+  return prefix + path;
+}
+
 void process_image(Magick::Image img)
 {
+  std::string prefix = img.comment();
   void (*process)(encode::WorkUnit&) = nullptr;
   void* (*compress)(const void*,size_t,size_t*) = nullptr;
 
@@ -405,12 +505,10 @@ void process_image(Magick::Image img)
       break;
 
     case ETC1:
-      rg_etc1::pack_etc1_block_init();
       process = encode::etc1;
       break;
 
     case ETC1A4:
-      rg_etc1::pack_etc1_block_init();
       process = encode::etc1a4;
       break;
 
@@ -427,7 +525,6 @@ void process_image(Magick::Image img)
       break;
 
     case AUTO_ETC1:
-      rg_etc1::pack_etc1_block_init();
       process = encode::etc1;
       if(has_alpha<4>(img))
         process = encode::etc1a4;
@@ -486,6 +583,9 @@ void process_image(Magick::Image img)
   Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent());
 
   std::vector<std::thread> workers;
+  work_mutex.lock();
+  work_done = false;
+  work_mutex.unlock();
   for(size_t i = 0; i < NUM_THREADS; ++i)
     workers.push_back(std::thread(work_thread, nullptr));
 
@@ -572,14 +672,14 @@ void process_image(Magick::Image img)
   {
     try
     {
-        preview.write(preview_path);
+        preview.write(add_prefix(preview_path, prefix));
     }
     catch(...)
     {
       try
       {
         preview.magick("PNG");
-        preview.write(preview_path);
+        preview.write(add_prefix(preview_path, prefix));
       }
       catch(...)
       {
@@ -600,7 +700,7 @@ void process_image(Magick::Image img)
   if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
     std::fprintf(stderr, "Warning: output size exceeds compression header limit\n");
 
-  FILE *fp = std::fopen(output_path.c_str(), "wb");
+  FILE *fp = std::fopen(add_prefix(output_path, prefix).c_str(), "wb");
 
   if(compression_format == COMPRESSION_FAKE)
   {
@@ -662,15 +762,18 @@ void print_version()
 
 void print_usage(const char *prog)
 {
-  std::printf("Usage: %s [-f <format>] [-m <filter>] [-o <output>] [-p <preview>] [-q <etc1-quality>] [-z <compression>] <input>\n", prog);
+  std::printf("Usage: %s [OPTIONS...] <input>\n", prog);
 
   std::printf(
+    "  Options:\n"
     "    -f <format>       See \"Format Options\"\n"
     "    -m <filter>       Generate mipmaps. See \"Mipmap Filter Options\"\n"
     "    -o <output>       Output file\n"
     "    -p <preview>      Output preview file\n"
     "    -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
     "    -z <compression>  Compress output. See \"Compression Options\"\n"
+    "    --cubemap         Generate a cubemap. See \"Cubemap\"\n"
+    "    --skybox          Generate a skybox. See \"Skybox\"\n"
     "    <input>           Input file\n\n"
 
     "  Format Options:\n"
@@ -745,17 +848,39 @@ void print_usage(const char *prog)
     "      0x10: LZSS\n"
     "      0x11: LZ11\n"
     "      0x28: Huffman encoding\n"
-    "      0x30: Run-length encoding\n"
+    "      0x30: Run-length encoding\n\n"
+
+    "    Cubemap:\n"
+    "      A cubemap is generated from the input image in the following convention:\n"
+    "      +----+----+---------+\n"
+    "      |    | +Y |         |\n"
+    "      +----+----+----+----+\n"
+    "      | -X | +Z | -X | -Z |\n"
+    "      +----+----+----+----+\n"
+    "      |    | -Y |         |\n"
+    "      +----+----+---------+\n\n"
+
+    "    Skybox:\n"
+    "      A skybox is generated from the input image in the following convention:\n"
+    "      +----+----+---------+\n"
+    "      |    | +Y |         |\n"
+    "      +----+----+----+----+\n"
+    "      | -X | -Z | -X | +Z |\n"
+    "      +----+----+----+----+\n"
+    "      |    | -Y |         |\n"
+    "      +----+----+---------+\n\n"
   );
 }
 
 const struct option long_options[] =
 {
+  { "cubemap",  no_argument,       nullptr, 'c', },
   { "format",   required_argument, nullptr, 'f', },
   { "output",   required_argument, nullptr, 'o', },
   { "quality",  required_argument, nullptr, 'q', },
-  { "compress", required_argument, nullptr, 'z', },
+  { "skybox",   no_argument,       nullptr, 's', },
   { "version",  no_argument,       nullptr, 'v', },
+  { "compress", required_argument, nullptr, 'z', },
   { nullptr,    no_argument,       nullptr,   0, },
 };
 
@@ -771,6 +896,10 @@ int main(int argc, char *argv[])
   {
     switch(c)
     {
+      case 'c':
+        cubemap_type = CUBEMAP_CUBE;
+        break;
+
       case 'f':
       {
         ProcessFormatString *it =
@@ -826,7 +955,14 @@ int main(int argc, char *argv[])
         else if(strcasecmp("high", optarg) == 0)
           etc1_quality = rg_etc1::cHighQuality;
         else
+        {
           std::fprintf(stderr, "Invalid ETC1 quality '%s'\n", optarg);
+          return EXIT_FAILURE;
+        }
+        break;
+
+      case 's':
+        cubemap_type = CUBEMAP_SKYBOX;
         break;
 
       case 'v':
@@ -863,9 +999,16 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
+  if(process_format == ETC1
+  || process_format == ETC1A4
+  || process_format == AUTO_ETC1)
+    rg_etc1::pack_etc1_block_init();
+
   try
   {
-    process_image(load_image(argv[optind]));
+    std::vector<Magick::Image> images = load_image(argv[optind]);
+    for(size_t i = 0; i < images.size(); ++i)
+      process_image(images[i]);
   }
   catch(const std::exception &e)
   {
