@@ -17,6 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
+/** @file compress.h
+ *  @brief Compression routines
+ */
 #pragma once
 
 #include "compat.h"
@@ -28,18 +31,79 @@ extern "C"
 #include <stdint.h>
 #endif
 
+/** @brief LZSS/LZ10 compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns Compressed buffer
+ *  @note Caller must `free()` the output buffer
+ */
 void* lzss_encode(const void *src, size_t len, size_t *outlen);
+
+/** @brief LZSS/LZ10 decompression
+ *  @param[in]  src Source buffer
+ *  @param[out] dst Destination buffer
+ *  @param[in]  len Source length
+ *  @note The output buffer must be large enough to hold the decompressed data
+ */
 void  lzss_decode(const void *src, void *dst, size_t len);
 
+/** @brief LZ11 compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns Compressed buffer
+ *  @note Caller must `free()` the output buffer
+ */
 void* lz11_encode(const void *src, size_t len, size_t *outlen);
+
+/** @brief LZ11 decompression
+ *  @param[in]  src Source buffer
+ *  @param[out] dst Destination buffer
+ *  @param[in]  len Source length
+ *  @note The output buffer must be large enough to hold the decompressed data
+ */
 void  lz11_decode(const void *src, void *dst, size_t len);
 
+/** @brief Run-length encoding compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns Compressed buffer
+ *  @note Caller must `free()` the output buffer
+ */
 void* rle_encode(const void *src, size_t len, size_t *outlen);
+
+/** @brief Run-length encoding decompression
+ *  @param[in]  src Source buffer
+ *  @param[out] dst Destination buffer
+ *  @param[in]  len Source length
+ *  @note The output buffer must be large enough to hold the decompressed data
+ */
 void  rle_decode(const void *src, void *dst, size_t len);
 
+/** @brief Huffman compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns Compressed buffer
+ *  @note Caller must `free()` the output buffer
+ */
 void* huff_encode(const void *src, size_t len, size_t *outlen);
+
+/** @brief Huffman decompression
+ *  @param[in]  src Source buffer
+ *  @param[out] dst Destination buffer
+ *  @param[in]  len Source length
+ *  @note The output buffer must be large enough to hold the decompressed data
+ */
 void  huff_decode(const void *src, void *dst, size_t len);
 
+/** @brief Output a GBA-style compression header
+ *  @param[out] header Output header
+ *  @param[in]  type   Compression type
+ *  @param[in]  size   Uncompressed data size
+ */
 static inline void
 compression_header(uint8_t header[4], uint8_t type, size_t size)
 {
@@ -53,13 +117,17 @@ compression_header(uint8_t header[4], uint8_t type, size_t size)
 #include <stdlib.h>
 #include <string.h>
 
+/** @brief Output buffer */
 typedef struct
 {
-  uint8_t *data;
-  size_t  len;
-  size_t  limit;
+  uint8_t *data; ///< Output data
+  size_t  len;   ///< Data length
+  size_t  limit; ///< Maximum data length
 } buffer_t;
 
+/** @brief Initialize buffer_t
+ *  @param[out] buffer Output buffer
+ */
 static inline void
 buffer_init(buffer_t *buffer)
 {
@@ -68,6 +136,13 @@ buffer_init(buffer_t *buffer)
   buffer->limit = 0;
 }
 
+/** @brief Append to a buffer
+ *  @param[in,out] buffer Output buffer
+ *  @param[in]     data   Data to append
+ *  @param[in]     len    Length of data to append
+ *  @retval 0  success
+ *  @retval -1 failure
+ */
 static inline int
 buffer_push(buffer_t *buffer, const uint8_t *data, size_t len)
 {
@@ -93,6 +168,12 @@ buffer_push(buffer_t *buffer, const uint8_t *data, size_t len)
   return 0;
 }
 
+/** @brief Pad an output buffer
+ *  @param[in,out] buffer  Output buffer to pad
+ *  @param[in]     padding Alignment to pad
+ *  @retval 0  success
+ *  @retval -1 failure
+ */
 static inline int
 buffer_pad(buffer_t *buffer, size_t padding)
 {
@@ -105,6 +186,9 @@ buffer_pad(buffer_t *buffer, size_t padding)
   return 0;
 }
 
+/** @brief Destroy an output buffer
+ *  @param[in] buffer Output buffer to destroy
+ */
 static inline void
 buffer_destroy(buffer_t *buffer)
 {

@@ -17,6 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
+/** @file main.cpp
+ *  @brief Program entry point
+ */
 #include "compat.h"
 #include "compress.h"
 #include "encode.h"
@@ -33,45 +36,55 @@
 #include <vector>
 #include <getopt.h>
 
+/** @brief Get number of elements in an array
+ *  @param[in] x Array to count
+ *  @returns Number of elements in array
+ */
 #define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
 
 namespace
 {
 
-std::string output_path;
-std::string preview_path;
-
+/** @brief Process format */
 enum ProcessFormat
 {
-  RGBA8888,
-  RGB888,
-  RGBA5551,
-  RGB565,
-  RGBA4444,
-  LA88,
-  HILO88,
-  L8,
-  A8,
-  LA44,
-  L4,
-  A4,
-  ETC1,
-  ETC1A4,
-  AUTO_L8,
-  AUTO_L4,
-  AUTO_ETC1,
-} process_format = RGBA8888;
+  RGBA8888,  ///< RGBA8888 encoding
+  RGB888,    ///< RGB888 encoding
+  RGBA5551,  ///< RGBA5551 encoding
+  RGB565,    ///< RGB565 encoding
+  RGBA4444,  ///< RGBA4444 encoding
+  LA88,      ///< LA88 encoding
+  HILO88,    ///< HILO88 encoding
+  L8,        ///< L8 encoding
+  A8,        ///< A8 encoding
+  LA44,      ///< LA44 encoding
+  L4,        ///< L4 encoding
+  A4,        ///< A4 encoding
+  ETC1,      ///< ETC1 encoding
+  ETC1A4,    ///< ETC1A4 encoding
+  AUTO_L8,   ///< L8/LA88 encoding
+  AUTO_L4,   ///< L4/LA44 encoding
+  AUTO_ETC1, ///< ETC1/ETC1A4 encoding
+};
 
+/** @brief Process format string map */
 struct ProcessFormatString
 {
-  const char    *str;
-  ProcessFormat fmt;
+  const char    *str; ///< string
+  ProcessFormat fmt;  ///< format
 
+  /** @brief Comparator
+   *  @param[in] str String to compare
+   */
   bool operator<(const char *str) const
   {
+    // case-insensitive comparison
     return strcasecmp(this->str, str) < 0;
   }
-} output_format_strings[] =
+};
+
+/** @brief Process format strings */
+ProcessFormatString output_format_strings[] =
 {
   { "a",         A8,       },
   { "a4",        A4,       },
@@ -103,31 +116,40 @@ struct ProcessFormatString
   { "rgba8",     RGBA8888, },
   { "rgba8888",  RGBA8888, },
 };
+
+/** @brief End of output_format_strings */
 ProcessFormatString *output_format_strings_end =
   output_format_strings + ARRAY_COUNT(output_format_strings);
 
-rg_etc1::etc1_quality etc1_quality = rg_etc1::cMediumQuality;
-
+/** @brief Compression format */
 enum CompressionFormat
 {
-  COMPRESSION_NONE,
-  COMPRESSION_FAKE,
-  COMPRESSION_LZ10,
-  COMPRESSION_LZ11,
-  COMPRESSION_RLE,
-  COMPRESSION_HUFF,
-} compression_format = COMPRESSION_NONE;
+  COMPRESSION_NONE, ///< No compression
+  COMPRESSION_FAKE, ///< No compression, with header
+  COMPRESSION_LZ10, ///< LZSS/LZ10 compression
+  COMPRESSION_LZ11, ///< LZ11 compression
+  COMPRESSION_RLE,  ///< Run-length encoding compression
+  COMPRESSION_HUFF, ///< Huffman encoding
+};
 
+/** @brief Compression format string map */
 struct CompressionFormatString
 {
-  const char        *str;
-  CompressionFormat fmt;
+  const char        *str; ///< string
+  CompressionFormat fmt;  ///< format
 
+  /** @brief Comparator
+   *  @param[in] str String to compare
+   */
   bool operator<(const char *str) const
   {
+    // case-insensitive comparison
     return strcasecmp(this->str, str) < 0;
   }
-} compression_format_strings[] =
+};
+
+/** @brief Compression format strings */
+CompressionFormatString compression_format_strings[] =
 {
   { "fake",     COMPRESSION_FAKE, },
   { "huff",     COMPRESSION_HUFF, },
@@ -138,19 +160,29 @@ struct CompressionFormatString
   { "none",     COMPRESSION_NONE, },
   { "rle",      COMPRESSION_RLE,  },
 };
+
+/** @brief End of compression_format_strings */
 CompressionFormatString *compression_format_strings_end =
   compression_format_strings + ARRAY_COUNT(compression_format_strings);
 
+/** @brief Filter type string format */
 struct FilterTypeString
 {
-  const char *str;
-  FilterType type;
+  const char *str; ///< string
+  FilterType type; ///< filter type
 
+  /** @brief Comparator
+   *  @param[in] str String to compare
+   */
   bool operator<(const char *str) const
   {
+    // case-insensitive comparison
     return strcasecmp(this->str, str) < 0;
   }
-} filter_type_strings[] =
+};
+
+/** @brief Filter type strings */
+FilterTypeString filter_type_strings[] =
 {
   { "bartlett",       Magick::BartlettFilter,      },
   { "bessel",         Magick::BesselFilter,        },
@@ -183,22 +215,50 @@ struct FilterTypeString
   { "triangle",       Magick::TriangleFilter,      },
   { "welsh",          Magick::WelshFilter,         },
 };
+
+/** @brief End of filter_type_strings */
 FilterTypeString *filter_type_strings_end =
   filter_type_strings + ARRAY_COUNT(filter_type_strings);
 
-FilterType filter_type = Magick::UndefinedFilter;
-
+/** @brief Cubemap type */
 enum CubemapType
 {
-  CUBEMAP_NONE,
-  CUBEMAP_CUBE,
-  CUBEMAP_SKYBOX,
-} cubemap_type = CUBEMAP_NONE;
+  CUBEMAP_NONE,   ///< Normal image
+  CUBEMAP_CUBE,   ///< Cubemap image
+  CUBEMAP_SKYBOX, ///< Skybox image
+};
 
+/** @brief Output path option */
+std::string output_path;
+
+/** @brief Preview path option */
+std::string preview_path;
+
+/** @brief Process format option */
+ProcessFormat process_format = RGBA8888;
+
+/** @brief ETC1 quality option */
+rg_etc1::etc1_quality etc1_quality = rg_etc1::cMediumQuality;
+
+/** @brief Compression format option */
+CompressionFormat compression_format = COMPRESSION_NONE;
+
+/** @brief Mipmap filter type option */
+FilterType filter_type = Magick::UndefinedFilter;
+
+/** @brief Cubemap/skybox option */
+CubemapType cubemap_type = CUBEMAP_NONE;
+
+/** @brief Load image
+ *  @param[in] path Input path
+ *  @returns vector of images to process
+ */
 std::vector<Magick::Image> load_image(const char *path)
 {
+  // open the image
   Magick::Image img(path);
 
+  // check for RGB colorspace
   switch(img.colorSpace())
   {
     case Magick::RGBColorspace:
@@ -206,24 +266,30 @@ std::vector<Magick::Image> load_image(const char *path)
       break;
 
     default:
+      // convert to RGB colorspace
       img.colorSpace(Magick::RGBColorspace);
       break;
   }
 
+  // double-check RGB channels
   if(!has_rgb(img))
     throw std::runtime_error("No RGB information");
 
   double width  = img.columns();
   double height = img.rows();
 
+  // get sub-image size for cubemap/skybox
   if(cubemap_type != CUBEMAP_NONE)
   {
     width  /= 4.0;
     height /= 3.0;
   }
 
+  // check that sub-image width is integral
   if(width != static_cast<size_t>(width))
       throw std::runtime_error("Invalid width");
+
+  // check for correct texture width
   switch(static_cast<size_t>(width))
   {
     case    8: case   16: case   32: case   64:
@@ -234,8 +300,11 @@ std::vector<Magick::Image> load_image(const char *path)
       throw std::runtime_error("Invalid width");
   }
 
+  // check that sub-image height is integral
   if(height != static_cast<size_t>(height))
       throw std::runtime_error("Invalid height");
+
+  // check for correct texture height
   switch(static_cast<size_t>(height))
   {
     case    8: case   16: case   32: case   64:
@@ -246,16 +315,20 @@ std::vector<Magick::Image> load_image(const char *path)
       throw std::runtime_error("Invalid height");
   }
 
+  // Set page offsets to 0
   img.page(Magick::Geometry(img.columns(), img.rows()));
 
   std::vector<Magick::Image> result;
   if(cubemap_type == CUBEMAP_NONE)
   {
+    // just push the source image
     img.comment("");
     result.push_back(img);
   }
   else
   {
+    // extract the six faces from cubemap/skybox
+    // PICA 200 cubemapping inverts texture vertical axis
     Magick::Image copy;
 
     // +x
@@ -323,8 +396,13 @@ std::vector<Magick::Image> load_image(const char *path)
   return result;
 }
 
+/** @brief Swizzle an 8x8 tile (Morton order)
+ *  @param[in] p       Tile to swizzle
+ *  @param[in] reverse Whether to unswizzle
+ */
 void swizzle(PixelPacket p, bool reverse)
 {
+  // swizzle foursome table
   static const unsigned char table[][4] =
   {
     {  2,  8, 16,  4, },
@@ -343,6 +421,7 @@ void swizzle(PixelPacket p, bool reverse)
 
   if(!reverse)
   {
+    // swizzle each foursome
     for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
     {
       Magick::Color tmp = p[table[i][0]];
@@ -354,6 +433,7 @@ void swizzle(PixelPacket p, bool reverse)
   }
   else
   {
+    // unswizzle each foursome
     for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
     {
       Magick::Color tmp = p[table[i][3]];
@@ -364,18 +444,24 @@ void swizzle(PixelPacket p, bool reverse)
     }
   }
 
+  // (un)swizzle each pair
   swapPixel(p[12], p[18]);
   swapPixel(p[13], p[19]);
   swapPixel(p[44], p[50]);
   swapPixel(p[45], p[51]);
 }
 
+/** @brief Swizzle an image (Morton order)
+ *  @param[in] img     Image to swizzle
+ *  @param[in] reverse Whether to unswizzle
+ */
 void swizzle(Magick::Image &img, bool reverse)
 {
   Pixels cache(img);
   size_t height = img.rows();
   size_t width  = img.columns();
 
+  // (un)swizzle each tile
   for(size_t j = 0; j < height; j += 8)
   {
     for(size_t i = 0; i < width; i += 8)
@@ -387,32 +473,94 @@ void swizzle(Magick::Image &img, bool reverse)
   }
 }
 
-std::queue<encode::WorkUnit>  work_queue;
+/** @brief Check if an image has any transparency
+ *  @param[in] img Image to check
+ *  @returns whether image has any transparency
+ */
+template<int bits>
+bool has_alpha(Magick::Image &img)
+{
+  Pixels      cache(img);
+  PixelPacket p = cache.get(0, 0, img.columns(), img.rows());
+
+  size_t num = img.rows() * img.columns();
+
+  // check all pixels
+  for(size_t i = 0; i < num; ++i)
+  {
+    Magick::Color c = *p++;
+
+    // if the quantized pixel is not fully opaque, return true
+    if(quantum_to_bits<bits>(quantumAlpha(c)))
+      return true;
+  }
+
+  // no (partially) transparent pixels found
+  return false;
+}
+
+/** @brief Add prefix to a file name
+ *  @param[in] path   Path to prefix
+ *  @param[in] prefix Prefix to add
+ *  @returns Path with prefixed file name
+ */
+std::string add_prefix(std::string path, std::string prefix)
+{
+  // look for the file name
+  size_t pos = path.rfind('/');
+
+  // add prefix to file name
+  if(pos != std::string::npos)
+    return path.substr(0, pos+1) + prefix + path.substr(pos+1);
+  return prefix + path;
+}
+
+/** @brief Work queue */
+std::queue<encode::WorkUnit> work_queue;
+
+/** @brief Result queue */
 std::vector<encode::WorkUnit> result_queue;
 
+/** @brief Work queue condition variable */
 std::condition_variable work_cond;
-std::condition_variable result_cond;
-std::mutex              work_mutex;
-std::mutex              result_mutex;
-bool                    work_done = false;
 
+/** @brief Result queue condition variable */
+std::condition_variable result_cond;
+
+/** @brief Work queue mutex */
+std::mutex work_mutex;
+
+/** @brief Result queue mutex */
+std::mutex result_mutex;
+
+/** @brief Whether anymore work is coming */
+bool work_done = false;
+
+/** @brief Work thread
+ *  @param[in] param Unused
+ */
 THREAD_RETURN_T work_thread(void *param)
 {
   std::unique_lock<std::mutex> mutex(work_mutex);
   while(true)
   {
+    // wait for work
     while(!work_done && work_queue.empty())
       work_cond.wait(mutex);
 
+    // if there's no more work, quit
     if(work_done && work_queue.empty())
       THREAD_EXIT;
 
+    // get a work unit
     encode::WorkUnit work = work_queue.front();
     work_queue.pop();
     mutex.unlock();
 
+    // process the work unit
     work.process(work);
 
+    // put result on the result queue
     result_mutex.lock();
     result_queue.push_back(work);
     std::push_heap(result_queue.begin(), result_queue.end());
@@ -423,37 +571,18 @@ THREAD_RETURN_T work_thread(void *param)
   }
 }
 
-template<int bits>
-bool has_alpha(Magick::Image &img)
-{
-  Pixels      cache(img);
-  PixelPacket p = cache.get(0, 0, img.columns(), img.rows());
-
-  size_t num = img.rows() * img.columns();
-  for(size_t i = 0; i < num; ++i)
-  {
-    Magick::Color c = *p++;
-    if(quantum_to_bits<bits>(quantumAlpha(c)))
-      return true;
-  }
-
-  return false;
-}
-
-std::string add_prefix(std::string path, std::string prefix)
-{
-  size_t pos = path.rfind('/');
-  if(pos != std::string::npos)
-    return path.substr(0, pos+1) + prefix + path.substr(pos+1);
-  return prefix + path;
-}
-
+/** @brief Process image
+ *  @param[in] img Image to process
+ */
 void process_image(Magick::Image img)
 {
+  // get the image prefix
   std::string prefix = img.comment();
+
   void (*process)(encode::WorkUnit&) = nullptr;
   void* (*compress)(const void*,size_t,size_t*) = nullptr;
 
+  // get the processing routine
   switch(process_format)
   {
     case RGBA8888:
@@ -531,6 +660,7 @@ void process_image(Magick::Image img)
       break;
   }
 
+  // get the compression routine
   switch(compression_format)
   {
     case COMPRESSION_NONE:
@@ -555,62 +685,87 @@ void process_image(Magick::Image img)
       break;
   }
 
+  // mipmap queue
   std::queue<Magick::Image> img_queue;
+
+  // add base level
   img_queue.push(img);
 
+  // keep preview width/height
   size_t preview_width  = img.columns();
   size_t preview_height = img.rows();
 
+  // generate mipmaps
   if(filter_type != Magick::UndefinedFilter && preview_width > 8 && preview_height > 8)
   {
     size_t width  = preview_width;
     size_t height = preview_height;
 
+    // mipmaps will go on the right third of the preview image
     preview_width *= 1.5;
 
+    // mipmaps must have both dimensions >= 8
     while(width > 8 && height > 8)
     {
+      // copy image
       img = img_queue.front();
+
+      // set resize filter type
       img.filterType(filter_type);
 
+      // half each dimension
       width  = width / 2;
       height = height / 2;
+
+      // resize the image
       img.resize(Magick::Geometry(width, height));
+
+      // add to mipmap queue
       img_queue.push(img);
     }
   }
 
+  // create the preview image
   Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent());
 
+  // create worker threads
   std::vector<std::thread> workers;
   work_mutex.lock();
   work_done = false;
   work_mutex.unlock();
-  for(size_t i = 0; i < NUM_THREADS; ++i)
+  for(size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     workers.push_back(std::thread(work_thread, nullptr));
 
   encode::Buffer buf;
-  size_t hoff = 0;
-  size_t woff = 0;
+  size_t voff = 0; // vertical offset for mipmap preview
+  size_t hoff = 0; // horizontal offset for mipmap preview
+
+  // process each image in the mipmap queue
   while(!img_queue.empty())
   {
+    // get the first image in the queue
     img = img_queue.front();
     img_queue.pop();
 
+    // get the mipmap dimensions
     size_t width  = img.columns();
     size_t height = img.rows();
 
+    // all formats are swizzled except ETC1/ETC1A4
     if(process_format != ETC1 && process_format != ETC1A4)
       swizzle(img, false);
 
+    // get pixel cache
     Pixels      cache(img);
     PixelPacket p = cache.get(0, 0, img.columns(), img.rows());
 
+    // process each 8x8 tile
     uint64_t num_work = 0;
     for(size_t j = 0; j < height; j += 8)
     {
       for(size_t i = 0; i < width; i += 8)
       {
+        // create the work unit
         encode::WorkUnit work(num_work++,
                               p + (j*width + i),
                               width,
@@ -619,6 +774,7 @@ void process_image(Magick::Image img)
                               !preview_path.empty(),
                               process);
 
+        // queue the work unit
         work_mutex.lock();
         work_queue.push(work);
         work_cond.notify_one();
@@ -628,56 +784,75 @@ void process_image(Magick::Image img)
 
     if(img_queue.empty())
     {
+      // no more work is coming
       work_mutex.lock();
       work_done = true;
       work_cond.notify_all();
       work_mutex.unlock();
     }
 
+    // gather results
     for(uint64_t num_result = 0; num_result < num_work; ++num_result)
     {
+      // wait for the next result
       std::unique_lock<std::mutex> mutex(result_mutex);
       while(result_queue.empty() || result_queue.front().sequence != num_result)
         result_cond.wait(mutex);
 
+      // get the result's output buffer
       encode::Buffer result;
       std::pop_heap(result_queue.begin(), result_queue.end());
       result.swap(result_queue.back().result);
       result_queue.pop_back();
       mutex.unlock();
 
+      // append the result's output buffer
       buf.insert(buf.end(), result.begin(), result.end());
 
       mutex.lock();
     }
 
+    // synchronize the pixel cache
     cache.sync();
 
     if(!preview_path.empty())
     {
+      // unswizzle the mipmap image
       if(process_format != ETC1 && process_format != ETC1A4)
         swizzle(img, true);
 
-      preview.composite(img, Magick::Geometry(0, 0, woff, hoff), Magick::OverCompositeOp);
-      hoff += height;
-      if(woff == 0)
+      // composite the mipmap onto the preview
+      preview.composite(img, Magick::Geometry(0, 0, hoff, voff), Magick::OverCompositeOp);
+
+      // position for next mipmap
+      voff += height;
+      if(hoff == 0)
       {
-        hoff = 0;
-        woff = width;
+        voff = 0;
+        hoff = width;
       }
     }
+  }
+
+  // join all the worker threads
+  while(!workers.empty())
+  {
+    workers.back().join();
+    workers.pop_back();
   }
 
   if(!preview_path.empty())
   {
     try
     {
-        preview.write(add_prefix(preview_path, prefix));
+      // output the preview image
+      preview.write(add_prefix(preview_path, prefix));
     }
     catch(...)
     {
       try
       {
+        // type couldn't be determined from file extension, so try png
         preview.magick("PNG");
         preview.write(add_prefix(preview_path, prefix));
       }
@@ -688,22 +863,21 @@ void process_image(Magick::Image img)
     }
   }
 
-  while(!workers.empty())
-  {
-    workers.back().join();
-    workers.pop_back();
-  }
-
+  // check if we need to output the data
   if(output_path.empty())
     return;
 
+  // check compression header
   if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
     std::fprintf(stderr, "Warning: output size exceeds compression header limit\n");
 
   FILE *fp = std::fopen(add_prefix(output_path, prefix).c_str(), "wb");
+  if(!fp)
+    throw std::runtime_error("Failed to open output file");
 
   if(compression_format == COMPRESSION_FAKE)
   {
+    // write fake compression header
     uint8_t header[4];
     compression_header(header, 0x00, buf.size());
     std::fwrite(header, 1, sizeof(header), fp);
@@ -713,6 +887,7 @@ void process_image(Magick::Image img)
   uint8_t *buffer = &buf[0];
   if(compress)
   {
+    // compress data
     buffer = reinterpret_cast<uint8_t*>(compress(&buf[0], buf.size(), &outlen));
     if(!buffer)
     {
@@ -721,6 +896,7 @@ void process_image(Magick::Image img)
     }
   }
 
+  // output data
   size_t  pos = 0;
   while(pos < outlen)
   {
@@ -734,12 +910,15 @@ void process_image(Magick::Image img)
     pos += rc;
   }
 
+  // close output file
   std::fclose(fp);
 
+  // free compressed buffer
   if(buffer != &buf[0])
     std::free(buffer);
 }
 
+/** @brief Print version information */
 void print_version()
 {
   std::printf(
@@ -760,6 +939,9 @@ void print_version()
     "along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.\n");
 }
 
+/** @brief Print usage information
+ *  @param[in] prog Program invocation
+ */
 void print_usage(const char *prog)
 {
   std::printf("Usage: %s [OPTIONS...] <input>\n", prog);
@@ -872,6 +1054,7 @@ void print_usage(const char *prog)
   );
 }
 
+/** @brief Program long options */
 const struct option long_options[] =
 {
   { "cubemap",  no_argument,       nullptr, 'c', },
@@ -886,26 +1069,37 @@ const struct option long_options[] =
 
 }
 
+/** @brief Program entry point
+ *  @param[in] argc Number of command-line arguments
+ *  @param[in] argv Command-line arguments
+ *  @retval EXIT_SUCCESS
+ *  @retval EXIT_FAILURE
+ */
 int main(int argc, char *argv[])
 {
   const char *prog = argv[0];
 
   int c;
 
+  // parse options
   while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:s:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
       case 'c':
+        // cubemap
         cubemap_type = CUBEMAP_CUBE;
         break;
 
       case 'f':
       {
+        // find matching output format
         ProcessFormatString *it =
           std::lower_bound(output_format_strings,
                            output_format_strings_end,
                            optarg);
+
+        // set output format option
         if(it != output_format_strings_end && strcasecmp(it->str, optarg) == 0)
           process_format = it->fmt;
         else
@@ -918,15 +1112,19 @@ int main(int argc, char *argv[])
       }
 
       case 'h':
+        // show help
         print_usage(prog);
         return EXIT_SUCCESS;
 
       case 'm':
       {
+        // find matching mipmap filter type
         FilterTypeString *it =
           std::lower_bound(filter_type_strings,
                            filter_type_strings_end,
                            optarg);
+
+        // set mipmap filter type option
         if(it != filter_type_strings_end && strcasecmp(it->str, optarg) == 0)
           filter_type = it->type;
         else
@@ -939,14 +1137,17 @@ int main(int argc, char *argv[])
       }
 
       case 'o':
+        // set output path option
         output_path = optarg;
         break;
 
       case 'p':
+        // set preview path option
         preview_path = optarg;
         break;
 
       case 'q':
+        // set ETC1 quality
         if(strcasecmp("low", optarg) == 0)
           etc1_quality = rg_etc1::cLowQuality;
         else if(strcasecmp("medium", optarg) == 0
@@ -962,19 +1163,24 @@ int main(int argc, char *argv[])
         break;
 
       case 's':
+        // skybox
         cubemap_type = CUBEMAP_SKYBOX;
         break;
 
       case 'v':
+        // print version
         print_version();
         return EXIT_SUCCESS;
 
       case 'z':
       {
+        // find matching compression format
         CompressionFormatString *it =
           std::lower_bound(compression_format_strings,
                            compression_format_strings_end,
                            optarg);
+
+        // set compression format option
         if(it != compression_format_strings_end && strcasecmp(it->str, optarg) == 0)
           compression_format = it->fmt;
         else
@@ -992,6 +1198,7 @@ int main(int argc, char *argv[])
     }
   }
 
+  // check that a non-option was provided (input file)
   if(optind == argc)
   {
     std::fprintf(stderr, "No image provided\n");
@@ -999,6 +1206,7 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
+  // initialize rg_etc1 if ETC1/ETC1A format chosen
   if(process_format == ETC1
   || process_format == ETC1A4
   || process_format == AUTO_ETC1)
@@ -1006,7 +1214,10 @@ int main(int argc, char *argv[])
 
   try
   {
+    // load mipmap images
     std::vector<Magick::Image> images = load_image(argv[optind]);
+
+    // process each mipmap image
     for(size_t i = 0; i < images.size(); ++i)
       process_image(images[i]);
   }

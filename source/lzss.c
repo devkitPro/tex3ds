@@ -17,6 +17,11 @@
  * You should have received a copy of the GNU General Public License
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
+/** @file lzss.c
+ *  @brief LZSS/LZ10/LZ11 compression routines
+ */
+
+/** @brief Enable internal compression routines */
 #define COMPRESSION_INTERNAL
 #include "compress.h"
 #include <assert.h>
@@ -25,18 +30,34 @@
 #include <stdlib.h>
 #include <string.h>
 
+/** @brief LZSS/LZ10 maximum match length */
 #define LZ10_MAX_LEN  18
+
+/** @brief LZSS/LZ10 maximum displacement */
 #define LZ10_MAX_DISP 4096
 
+/** @brief LZ11 maximum match length */
 #define LZ11_MAX_LEN  65808
+
+/** @brief LZ11 maximum displacement */
 #define LZ11_MAX_DISP 4096
 
+/** @brief LZ compression mode */
 typedef enum
 {
-  LZ10,
-  LZ11,
+  LZ10, ///< LZSS/LZ10 compression
+  LZ11, ///< LZ11 compression
 } lzss_mode_t;
 
+/** @brief Find best buffer match
+ *  @param[in]  start     Input buffer
+ *  @param[in]  buffer    Encoding buffer
+ *  @param[in]  len       Length of encoding buffer
+ *  @param[in]  max_disp  Maximum displacement
+ *  @param[out] outlen    Length of match
+ *  @returns Best match
+ *  @retval NULL no match
+ */
 const uint8_t*
 find_best_match(const uint8_t *start,
                 const uint8_t *buffer,
@@ -47,12 +68,15 @@ find_best_match(const uint8_t *start,
   const uint8_t *best_start = NULL;
   size_t        best_len    = 0;
 
+  // clamp start to maximum displacement from buffer
   if(start + max_disp < buffer)
     start = buffer - max_disp;
 
+  // find nearest matching start byte
   uint8_t *p = memrchr(start, *buffer, buffer - start);
   while(p != NULL)
   {
+    // find length of match
     size_t test_len = 1;
     for(size_t i = 1; i < len; ++i)
     {
@@ -64,26 +88,39 @@ find_best_match(const uint8_t *start,
 
     if(test_len >= best_len)
     {
+      // this match is the best so far, so save it
       best_start = p;
       best_len   = test_len;
     }
 
+    // if we maximized the match, stop here
     if(best_len == len)
       break;
 
+    // find next nearest matching byte and try again
     p = memrchr(start, *buffer, p - start);
   }
 
   if(best_len)
   {
+    // we found a match, so return it
     *outlen = best_len;
     return best_start;
   }
 
+  // no match found
   *outlen = 0;
   return NULL;
 }
 
+/** @brief LZSS/LZ10/LZ11 compression
+ *  @param[in]  buffer Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @param[in]  mode   LZ mode
+ *  @returns Compressed buffer
+ *  @note Caller must `free()` the output buffer
+ */
 static void*
 lzss_common_encode(const uint8_t *buffer,
                    size_t        len,
@@ -96,35 +133,43 @@ lzss_common_encode(const uint8_t *buffer,
   const uint8_t *end   = buffer + len;
 #endif
   size_t        shift = 7, code_pos = 4;
-
-  const size_t  max_len  = mode == LZ10 ? LZ10_MAX_LEN  : LZ11_MAX_LEN;
-  const size_t  max_disp = mode == LZ10 ? LZ10_MAX_DISP : LZ11_MAX_DISP;
-
   uint8_t       header[4];
 
+  // get maximum match length
+  const size_t max_len  = mode == LZ10 ? LZ10_MAX_LEN  : LZ11_MAX_LEN;
+
+  // get maximum displacement
+  const size_t max_disp = mode == LZ10 ? LZ10_MAX_DISP : LZ11_MAX_DISP;
+
+  assert(mode == LZ10 || mode == LZ11);
+
+  // fill compression header
   if(mode == LZ10)
     compression_header(header, 0x10, len);
   else
     compression_header(header, 0x11, len);
 
-  assert(mode == LZ10 || mode == LZ11);
-
+  // initialize output buffer
   buffer_init(&result);
 
+  // append compression header to output buffer
   if(buffer_push(&result, header, sizeof(header)) != 0)
   {
     buffer_destroy(&result);
     return NULL;
   }
 
+  // reserve an encode byte in output buffer
   if(buffer_push(&result, NULL, 1) != 0)
   {
     buffer_destroy(&result);
     return NULL;
   }
 
+  // set encode byte to 0
   result.data[code_pos] = 0;
 
+  // encode every byte
   while(len > 0)
   {
     assert(buffer < end);
@@ -135,6 +180,7 @@ lzss_common_encode(const uint8_t *buffer,
 
     if(buffer != start)
     {
+      // find best match
       if(len < max_len)
         tmp = find_best_match(start, buffer, len, max_disp, &tmplen);
       else
@@ -151,74 +197,107 @@ lzss_common_encode(const uint8_t *buffer,
       }
     }
     else
+    {
+      // beginning of stream must be primed with at least one value
       tmplen = 1;
+    }
 
     if(tmplen > 2 && tmplen < len)
     {
+      // this match is long enough to be compressed; let's check if it's
+      // cheaper to encode this byte as a copy and start compression at the
+      // next byte
       size_t skip_len, next_len;
 
+      // get best match starting at the next byte
       if(len+1 < max_len)
         find_best_match(start, buffer+1, len-1, max_disp, &skip_len);
       else
         find_best_match(start, buffer+1, max_len, max_disp, &skip_len);
+
+      // check if the match is too small to compress
       if(skip_len < 3)
         skip_len = 1;
 
+      // get best match for data following the current compressed chunk
       if(len+tmplen < max_len)
         find_best_match(start, buffer+tmplen, len-tmplen, max_disp, &next_len);
       else
         find_best_match(start, buffer+tmplen, max_len, max_disp, &next_len);
+
+      // check if the match is too small to compress
       if(next_len < 3)
         next_len = 1;
 
+      // if compressing this chunk and the next chunk is less valuable than
+      // skipping this byte and starting compression at the next byte, mark
+      // this byte as being needed to copy
       if(tmplen + next_len <= skip_len + 1)
         tmplen = 1;
     }
 
     if(tmplen < 3)
     {
+      // this is a copy chunk; append this byte to the output buffer
       if(buffer_push(&result, buffer, 1) != 0)
       {
         buffer_destroy(&result);
         return NULL;
       }
+
+      // only one byte is copied
       tmplen = 1;
     }
     else if(mode == LZ10)
     {
+      // this is a compressed chunk in LZSS/LZ10 mode; reserve two bytes in the
+      // output buffer
       if(buffer_push(&result, NULL, 2) != 0)
       {
         buffer_destroy(&result);
         return NULL;
       }
 
+      // mark this chunk as compressed
       result.data[code_pos] |= (1 << shift);
+
+      // encode the displacement and length
       size_t disp = buffer - tmp - 1;
       result.data[result.len-2] = ((tmplen-3) << 4) | (disp >> 8);
       result.data[result.len-1] = disp;
     }
-    else if(tmplen <= 16)
+    else if(tmplen <= 0x10)
     {
+      // this is a compressed chunk in LZSS/LZ11 mode; reserve two bytes in the
+      // output buffer
       if(buffer_push(&result, NULL, 2) != 0)
       {
         buffer_destroy(&result);
         return NULL;
       }
 
+      // mark this chunk as compressed
       result.data[code_pos] |= (1 << shift);
+
+      // encode the displacement and length
       size_t disp = buffer - tmp - 1;
       result.data[result.len-2] = ((tmplen-0x1) << 4) | (disp >> 8);
       result.data[result.len-1] = disp;
     }
-    else if(tmplen <= 272)
+    else if(tmplen <= 0x110)
     {
+      // this is a compressed chunk in LZSS/LZ11 mode; reserve three bytes in
+      // the output buffer
       if(buffer_push(&result, NULL, 3) != 0)
       {
         buffer_destroy(&result);
         return NULL;
       }
 
+      // mark this chunk as compressed
       result.data[code_pos] |= (1 << shift);
+
+      // encode the displacement and length
       size_t disp = buffer - tmp - 1;
       result.data[result.len-3] = (tmplen-0x11) >> 4;
       result.data[result.len-2] = ((tmplen-0x11) << 4) | (disp >> 8);
@@ -226,13 +305,18 @@ lzss_common_encode(const uint8_t *buffer,
     }
     else
     {
+      // this is a compressed chunk in LZSS/LZ11 mode; reserve four bytes in
+      // the output buffer
       if(buffer_push(&result, NULL, 4) != 0)
       {
         buffer_destroy(&result);
         return NULL;
       }
 
+      // mark this chunk as compressed
       result.data[code_pos] |= (1 << shift);
+
+      // encode the displacement and length
       size_t disp = buffer - tmp - 1;
       result.data[result.len-4] = (1 << 4) | (tmplen-0x111) >> 12;
       result.data[result.len-3] = (tmplen-0x111) >> 4;
@@ -240,11 +324,13 @@ lzss_common_encode(const uint8_t *buffer,
       result.data[result.len-1] = disp;
     }
 
+    // advance input buffer
     buffer += tmplen;
     len    -= tmplen;
 
     if(shift == 0 && len != 0)
     {
+      // we need to encode more data, so reserve a new code byte
       shift = 8;
       if(buffer_push(&result, NULL, 1) != 0)
       {
@@ -252,21 +338,27 @@ lzss_common_encode(const uint8_t *buffer,
         return NULL;
       }
 
+      // update code byte position and clear its byte
       code_pos = result.len - 1;
       result.data[code_pos] = 0;
     }
 
+    // advance code byte bit position
     if(shift != 0)
       --shift;
   }
 
+  // pad the output buffer to 4 bytes
   if(buffer_pad(&result, 4) != 0)
   {
     buffer_destroy(&result);
     return NULL;
   }
 
+  // set the output length
   *outlen = result.len;
+
+  // return the output data
   return result.data;
 }
 

@@ -17,6 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
+/** @file magick_compat.cpp
+ *  @brief ImageMagick compatibility routines
+ */
 #include "magick_compat.h"
 #include <cassert>
 
@@ -29,34 +32,32 @@ PixelPacket::Reference::Reference(const Pixels *cache, Magick::Quantum *pixel)
   pixel(pixel)
 { }
 
-PixelPacket::Reference::Reference(const PixelPacket::Reference &other)
-: cache(other.cache),
-  pixel(other.pixel)
-{ }
-
 PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Reference &other)
 {
   if(&other != this)
   {
+    // copy pixel data
     pixel[cache->red]   = other.pixel[other.cache->red];
     pixel[cache->green] = other.pixel[other.cache->green];
     pixel[cache->blue]  = other.pixel[other.cache->blue];
 
     if(cache->alpha >= 0)
-      pixel[cache->alpha] = other.pixel[other.cache->alpha];
+    {
+      using Magick::Quantum;
+      if(other.cache->alpha >= 0)
+        pixel[cache->alpha] = other.pixel[other.cache->alpha];
+      else
+        pixel[cache->alpha] = QuantumRange;
+    }
   }
 
   return *this;
 }
 
 #if __cplusplus >= 201103L
-PixelPacket::Reference::Reference(PixelPacket::Reference &&other)
-: cache(other.cache),
-  pixel(other.pixel)
-{ }
-
 PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference &&other)
 {
+  // copy pixel data
   pixel[cache->red]   = other.pixel[other.cache->red];
   pixel[cache->green] = other.pixel[other.cache->green];
   pixel[cache->blue]  = other.pixel[other.cache->blue];
@@ -76,6 +77,7 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference
 
 PixelPacket::Reference& PixelPacket::Reference::operator=(const Magick::Color &c)
 {
+  // copy color to pixel
   pixel[cache->red]   = quantumRed(c);
   pixel[cache->green] = quantumGreen(c);
   pixel[cache->blue]  = quantumBlue(c);
@@ -88,26 +90,26 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(const Magick::Color &c
 
 PixelPacket::Reference::operator Magick::Color() const
 {
+  // extract color from pixel
   using Magick::Quantum;
   return Magick::Color(pixel[cache->red],
                        pixel[cache->green],
                        pixel[cache->blue],
                        cache->alpha >= 0 ? pixel[cache->alpha] : QuantumRange);
 }
+
 /*------------------------------------------------------------------------------
  * PixelPacket
  *----------------------------------------------------------------------------*/
 PixelPacket::PixelPacket(const Pixels *cache, Magick::Quantum *pixels)
 : cache(cache),
   pixels(pixels)
-{
-}
+{ }
 
 PixelPacket::PixelPacket(const PixelPacket &other)
 : cache(other.cache),
   pixels(other.pixels)
-{
-}
+{ }
 
 PixelPacket& PixelPacket::operator=(const PixelPacket &other)
 {
@@ -163,6 +165,7 @@ PixelPacket PixelPacket::operator++(int)
   pixels += cache->stride;
   return tmp;
 }
+
 /*------------------------------------------------------------------------------
  * Pixels
  *----------------------------------------------------------------------------*/

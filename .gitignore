@@ -8,6 +8,8 @@ config.log
 config.status
 configure
 depcomp
+doc/
+Doxyfile
 INSTALL
 install-sh
 Makefile

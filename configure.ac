@@ -26,6 +26,14 @@ AX_CHECK_COMPILE_FLAG([-pthread],   [CXXFLAGS+=" -pthread"])
 AX_CHECK_COMPILE_FLAG([-flto],      [CXXFLAGS+=" -flto"])
 AC_LANG_POP()
 
+AC_CHECK_PROGS([DOXYGEN], [doxygen])
+AM_CONDITIONAL([HAVE_DOXYGEN], [test -n "$DOXYGEN"])
+AM_COND_IF([HAVE_DOXYGEN], [AC_CONFIG_FILES([Doxyfile])])
+
+AC_CHECK_PROGS([DOT], [dot])
+AM_CONDITIONAL([HAVE_DOT], [test -n "$DOT"])
+AM_COND_IF([HAVE_DOT], AC_SUBST(HAVE_DOT, ["YES"], AC_SUBST(HAVE_DOT, ["NO"])))
+
 # Checks for libraries.
 PKG_CHECK_MODULES(ImageMagick, [Magick++ >= 6.0.0])
 

@@ -17,6 +17,9 @@
  * You should have received a copy of the GNU General Public License
  * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
+/** @file compat.h
+ *  @brief C/C++ platform compatibility
+ */
 #pragma once
 
 #ifdef __cplusplus
@@ -24,11 +27,17 @@
 // C++11
 #include <cstdint>
 #include <cstdlib>
+
+/** @brief Deleted constructor decoration */
+#define DELETE_CONSTRUCTOR = delete
 #else
 // C++98
 #include <cstdlib>
 #include <stdint.h>
 #define nullptr NULL
+
+/** @brief Deleted constructor decoration */
+#define DELETE_CONSTRUCTOR
 #endif
 #else
 // C
