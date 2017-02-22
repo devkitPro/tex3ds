@@ -6,7 +6,7 @@ AC_INIT([3dstex], [1.0.0], [pigman46@gmail.com])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([source/main.cpp])
 
-AM_INIT_AUTOMAKE([3dstex], [1.0.0])
+AM_INIT_AUTOMAKE
 
 # Checks for programs.
 AC_PROG_CXX
