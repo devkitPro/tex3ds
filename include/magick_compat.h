@@ -33,6 +33,7 @@
  *  - Magick::PixelPacket removed
  */
 #pragma once
+#include "compat.h"
 #include <algorithm>
 #include <Magick++.h>
 
@@ -150,13 +151,6 @@ public:
      */
     Reference(const Reference &other) DELETE_CONSTRUCTOR;
 
-#if __cplusplus >= 201103L
-    /** @brief Copy constructor
-     *  @param[in] other Reference to copy
-     */
-    Reference(Reference &&other) DELETE_CONSTRUCTOR;
-#endif
-
     friend class PixelPacket;
 
   public:
@@ -167,6 +161,11 @@ public:
     Reference& operator=(const Reference &other);
 
 #if __cplusplus >= 201103L
+    /** @brief Copy constructor
+     *  @param[in] other Reference to copy
+     */
+    Reference(Reference &&other) = default;
+
     /** @brief Assignment operator
      *  @param[in] other Reference to assign
      *  @returns reference to self
