@@ -12,8 +12,7 @@ bin_PROGRAMS = 3dstex
                  source/rg_etc1.cpp \
                  source/rle.c
 
-AM_CFLAGS   = -Iinclude -D_GNU_SOURCE $(ImageMagick_CFLAGS)
-AM_CXXFLAGS = -Iinclude -D_GNU_SOURCE $(ImageMagick_CFLAGS)
-AM_LDFLAGS  = $(ImageMagick_LIBS)
+3dstex_LDADD = $(ImageMagick_LIBS)
+AM_CPPFLAGS   = -Iinclude -D_GNU_SOURCE $(ImageMagick_CFLAGS)
 
 EXTRA_DIST = autogen.sh
