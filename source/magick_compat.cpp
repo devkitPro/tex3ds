@@ -32,6 +32,11 @@ PixelPacket::Reference::Reference(const Pixels *cache, Magick::Quantum *pixel)
   pixel(pixel)
 { }
 
+PixelPacket::Reference::Reference(const PixelPacket::Reference &other)
+: cache(other.cache),
+  pixel(other.pixel)
+{ }
+
 PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Reference &other)
 {
   if(&other != this)

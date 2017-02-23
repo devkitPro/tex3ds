@@ -146,14 +146,14 @@ public:
      */
     Reference(const Pixels *cache, Magick::Quantum *pixel);
 
-    /** @brief Copy constructor
-     *  @param[in] other Reference to copy
-     */
-    Reference(const Reference &other) DELETE_CONSTRUCTOR;
-
     friend class PixelPacket;
 
   public:
+    /** @brief Copy constructor
+     *  @param[in] other Reference to copy
+     */
+    Reference(const Reference &other);
+
     /** @brief Assignment operator
      *  @param[in] other Reference to assign
      *  @returns reference to self
