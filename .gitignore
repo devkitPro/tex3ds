@@ -21,3 +21,6 @@ source/.deps/
 source/.dirstamp
 source/*.o
 stamp-h1
+*.png
+*.jpg
+*.bin
