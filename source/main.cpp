@@ -2,20 +2,20 @@
  * Copyright (c) 2017
  *     Michael Theall (mtheall)
  *
- * This file is part of 3dstex.
+ * This file is part of tex3ds.
  *
- * 3dstex is free software: you can redistribute it and/or modify
+ * tex3ds is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
- * 3dstex is distributed in the hope that it will be useful,
+ * tex3ds is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.
+ * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
 /** @file main.cpp
  *  @brief Program entry point
@@ -922,21 +922,21 @@ void process_image(Magick::Image img)
 void print_version()
 {
   std::printf(
-    "3dstex v1.0.0\n"
+    "tex3ds v1.0.0\n"
     "Copyright (c) 2017 Michael Theall (mtheall)\n\n"
 
-    "3dstex is free software: you can redistribute it and/or modify\n"
+    "tex3ds is free software: you can redistribute it and/or modify\n"
     "it under the terms of the GNU General Public License as published by\n"
     "the Free Software Foundation, either version 3 of the License, or\n"
     "(at your option) any later version.\n\n"
 
-    "3dstex is distributed in the hope that it will be useful,\n"
+    "tex3ds is distributed in the hope that it will be useful,\n"
     "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
     "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
     "GNU General Public License for more details.\n\n"
 
     "You should have received a copy of the GNU General Public License\n"
-    "along with 3dstex.  If not, see <http://www.gnu.org/licenses/>.\n");
+    "along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.\n");
 }
 
 /** @brief Print usage information
@@ -1203,7 +1203,6 @@ int main(int argc, char *argv[])
   if(optind == argc)
   {
     std::fprintf(stderr, "No image provided\n");
-    print_usage(prog);
     return EXIT_FAILURE;
   }
 

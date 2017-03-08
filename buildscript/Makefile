@@ -34,14 +34,14 @@ export PKG_CONFIG_PATH := "$(LD_LIBRARY_PATH)/pkgconfig"
 .PHONY: all build clean
 
 all:
-	@echo "Use 'make 3dstex' to build static version of 3dstex"
+	@echo "Use 'make tex3ds' to build static version of tex3ds"
 
-3dstex: ImageMagick
+tex3ds: ImageMagick
 	@cd .. && \
 		./autogen.sh && \
 		./configure PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" PKG_CONFIG="pkg-config --static" && \
 		$(MAKE) LDFLAGS="-static -pthread" && \
-		strip ./3dstex
+		strip $@
 
 clean:
 	@$(RM) -r build/ \

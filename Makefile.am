@@ -2,9 +2,9 @@
 
 AUTOMAKE_OPTIONS = subdir-objects
 
-bin_PROGRAMS = 3dstex
+bin_PROGRAMS = tex3ds
 
-3dstex_SOURCES = source/encode.cpp \
+tex3ds_SOURCES = source/encode.cpp \
                  source/huff.c \
                  source/lzss.c \
                  source/magick_compat.cpp \
@@ -12,7 +12,7 @@ bin_PROGRAMS = 3dstex
                  source/rg_etc1.cpp \
                  source/rle.c
 
-3dstex_LDADD = $(ImageMagick_LIBS)
+tex3ds_LDADD = $(ImageMagick_LIBS)
 AM_CPPFLAGS   = -Iinclude -D_GNU_SOURCE $(ImageMagick_CFLAGS)
 
 EXTRA_DIST = autogen.sh

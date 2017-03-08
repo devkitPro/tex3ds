@@ -1,9 +1,9 @@
-# 3dstex
+# tex3ds
 
 **3DS Texture Conversion**
 
 ```
-Usage: ./3dstex [OPTIONS...] <input>
+Usage: ./tex3ds [OPTIONS...] <input>
   Options:
     -f <format>       See "Format Options"
     -m <filter>       Generate mipmaps. See "Mipmap Filter Options"
