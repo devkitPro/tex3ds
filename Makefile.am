@@ -4,7 +4,8 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 bin_PROGRAMS = tex3ds
 
-tex3ds_SOURCES = source/encode.cpp \
+tex3ds_SOURCES = source/atlas.cpp \
+                 source/encode.cpp \
                  source/huff.c \
                  source/lzss.c \
                  source/magick_compat.cpp \

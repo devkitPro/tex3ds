@@ -30,6 +30,7 @@
 #include <vector>
 #include <getopt.h>
 
+#include "atlas.h"
 #include "compat.h"
 #include "compress.h"
 #include "encode.h"
@@ -236,12 +237,13 @@ FilterTypeString filter_type_strings[] =
 FilterTypeString *filter_type_strings_end =
   filter_type_strings + ARRAY_COUNT(filter_type_strings);
 
-/** @brief Cubemap type */
-enum CubemapType
+/** @brief Processing mode */
+enum ProcessingMode
 {
-  CUBEMAP_NONE,   ///< Normal image
-  CUBEMAP_CUBE,   ///< Cubemap image
-  CUBEMAP_SKYBOX, ///< Skybox image
+  PROCESS_NORMAL,  ///< Normal
+  PROCESS_ATLAS,   ///< Atlas
+  PROCESS_CUBEMAP, ///< Cubemap
+  PROCESS_SKYBOX,  ///< Skybox
 };
 
 /** @brief Output path option */
@@ -262,8 +264,8 @@ CompressionFormat compression_format = COMPRESSION_AUTO;
 /** @brief Mipmap filter type option */
 FilterType filter_type = Magick::UndefinedFilter;
 
-/** @brief Cubemap/skybox option */
-CubemapType cubemap_type = CUBEMAP_NONE;
+/** @brief Processing mode option */
+ProcessingMode process_mode = PROCESS_NORMAL;
 
 /** @brief Output subimage data */
 std::vector<SubImage> subimage_data;
@@ -281,14 +283,11 @@ bool output_raw = false;
 size_t output_height;
 
 /** @brief Load image
- *  @param[in] path Input path
+ *  @param[in] img Input image
  *  @returns vector of images to process
  */
-std::vector<Magick::Image> load_image(const char *path)
+std::vector<Magick::Image> load_image(Magick::Image &img)
 {
-  // open the image
-  Magick::Image img(path);
-
   // check for RGB colorspace
   switch(img.colorSpace())
   {
@@ -310,7 +309,8 @@ std::vector<Magick::Image> load_image(const char *path)
   double height = img.rows();
 
   // get sub-image size for cubemap/skybox
-  if(cubemap_type != CUBEMAP_NONE)
+  if(process_mode == PROCESS_CUBEMAP
+  || process_mode == PROCESS_SKYBOX)
   {
     width  /= 4.0;
     height /= 3.0;
@@ -360,23 +360,25 @@ std::vector<Magick::Image> load_image(const char *path)
   img.page(Magick::Geometry(img.columns(), img.rows()));
 
   std::vector<Magick::Image> result;
-
-  if(cubemap_type == CUBEMAP_NONE)
+  if(process_mode == PROCESS_NORMAL
+  || process_mode == PROCESS_ATLAS)
   {
     // expand canvas if necessary
-    if(img.columns() != potCeil(img.columns()) || img.rows() != potCeil(img.rows()))
+    if(img.columns() != potCeil(img.columns())
+    || img.rows() != potCeil(img.rows()))
     {
       Magick::Image copy = img;
 
-      img = Magick::Image(Magick::Geometry(potCeil(img.columns()), potCeil(img.rows())),
+      img = Magick::Image(Magick::Geometry(potCeil(img.columns()),
+                                           potCeil(img.rows())),
                           transparent());
-      img.composite(copy, Magick::Geometry(0, 0),
-                    Magick::OverCompositeOp);
+      img.composite(copy, Magick::Geometry(0, 0), Magick::OverCompositeOp);
 
-      /// generate subimage info
-      subimage_data.push_back(SubImage(0.0f, 1.0f,
-                                       static_cast<float>(copy.columns()) / img.columns(),
-                                       1.0f - (static_cast<float>(copy.rows()) / img.rows())));
+      // generate subimage info
+      subimage_data.push_back(
+        SubImage("", 0.0f, 1.0f,
+                 static_cast<float>(copy.columns()) / img.columns(),
+                 1.0f - (static_cast<float>(copy.rows()) / img.rows())));
     }
 
     output_width  = img.columns();
@@ -394,7 +396,7 @@ std::vector<Magick::Image> load_image(const char *path)
     // +x
     copy = img;
     copy.crop(Magick::Geometry(width, height, 2*width, height));
-    if(cubemap_type == CUBEMAP_SKYBOX)
+    if(process_mode == PROCESS_SKYBOX)
       copy.flop(); // flip horizontal
     copy.flip(); // flip vertical
     copy.comment("px_");
@@ -403,7 +405,7 @@ std::vector<Magick::Image> load_image(const char *path)
     // -x
     copy = img;
     copy.crop(Magick::Geometry(width, height, 0, height));
-    if(cubemap_type == CUBEMAP_SKYBOX)
+    if(process_mode == PROCESS_SKYBOX)
       copy.flop(); // flip horizontal
     copy.flip(); // flip vertical
     copy.comment("nx_");
@@ -412,7 +414,7 @@ std::vector<Magick::Image> load_image(const char *path)
     // +y
     copy = img;
     copy.crop(Magick::Geometry(width, height, width, 0));
-    if(cubemap_type == CUBEMAP_CUBE)
+    if(process_mode == PROCESS_CUBEMAP)
       copy.flip(); // flip vertical
     copy.comment("py_");
     result.push_back(copy);
@@ -420,14 +422,14 @@ std::vector<Magick::Image> load_image(const char *path)
     // -y
     copy = img;
     copy.crop(Magick::Geometry(width, height, width, height*2));
-    if(cubemap_type == CUBEMAP_CUBE)
+    if(process_mode == PROCESS_CUBEMAP)
       copy.flip(); // flip vertical
     copy.comment("ny_");
     result.push_back(copy);
 
     // +z
     copy = img;
-    if(cubemap_type == CUBEMAP_CUBE)
+    if(process_mode == PROCESS_CUBEMAP)
       copy.crop(Magick::Geometry(width, height, width, height));
     else
     {
@@ -440,7 +442,7 @@ std::vector<Magick::Image> load_image(const char *path)
 
     // -z
     copy = img;
-    if(cubemap_type == CUBEMAP_CUBE)
+    if(process_mode == PROCESS_CUBEMAP)
       copy.crop(Magick::Geometry(width, height, width*3, height));
     else
     {
@@ -767,7 +769,8 @@ void process_image(Magick::Image &img)
   size_t preview_height = img.rows();
 
   // generate mipmaps
-  if(filter_type != Magick::UndefinedFilter && preview_width > 8 && preview_height > 8)
+  if(filter_type != Magick::UndefinedFilter
+  && preview_width > 8 && preview_height > 8)
   {
     size_t width  = preview_width;
     size_t height = preview_height;
@@ -797,7 +800,8 @@ void process_image(Magick::Image &img)
   }
 
   // create the preview image
-  Magick::Image preview(Magick::Geometry(preview_width, preview_height), transparent());
+  Magick::Image preview(Magick::Geometry(preview_width, preview_height),
+                        transparent());
 
   // create worker threads
   std::vector<std::thread> workers;
@@ -866,8 +870,11 @@ void process_image(Magick::Image &img)
     {
       // wait for the next result
       std::unique_lock<std::mutex> mutex(result_mutex);
-      while(result_queue.empty() || result_queue.front().sequence != num_result)
+      while(result_queue.empty()
+      || result_queue.front().sequence != num_result)
+      {
         result_cond.wait(mutex);
+      }
 
       // get the result's output buffer
       encode::Buffer result;
@@ -892,7 +899,8 @@ void process_image(Magick::Image &img)
         swizzle(img, true);
 
       // composite the mipmap onto the preview
-      preview.composite(img, Magick::Geometry(0, 0, hoff, voff), Magick::OverCompositeOp);
+      preview.composite(img, Magick::Geometry(0, 0, hoff, voff),
+                        Magick::OverCompositeOp);
 
       // position for next mipmap
       voff += height;
@@ -982,7 +990,8 @@ void write_tex3ds_header(FILE *fp)
   texture_params |= (w - 3) << 0;
   texture_params |= (h - 3) << 3;
 
-  if(cubemap_type != CUBEMAP_NONE)
+  if(process_mode == PROCESS_CUBEMAP
+  || process_mode == PROCESS_SKYBOX)
     texture_params |= 1 << 6;
 
   encode::encode<uint8_t>(texture_params, buf);
@@ -1113,7 +1122,9 @@ void write_image_data(FILE *fp)
 
   // compress data
   size_t  outlen;
-  uint8_t *buffer = reinterpret_cast<uint8_t*>(compress(image_data.data(), image_data.size(), &outlen));
+  uint8_t *buffer = reinterpret_cast<uint8_t*>(compress(image_data.data(),
+                                                        image_data.size(),
+                                                        &outlen));
   if(!buffer)
   {
     std::fclose(fp);
@@ -1196,6 +1207,7 @@ void print_usage(const char *prog)
     "    -r, --raw                    Output image data only\n"
     "    -v, --version                Show version and copyright information\n"
     "    -z, --compress <compression> Compress output. See \"Compression Options\"\n"
+    "    --atlas                      Generate texture atlas\n"
     "    --cubemap                    Generate a cubemap. See \"Cubemap\"\n"
     "    --skybox                     Generate a skybox. See \"Skybox\"\n"
     "    <input>                      Input file\n\n"
@@ -1300,9 +1312,11 @@ void print_usage(const char *prog)
 /** @brief Program long options */
 const struct option long_options[] =
 {
+  { "atlas",    no_argument,       nullptr, 'a', },
   { "cubemap",  no_argument,       nullptr, 'c', },
   { "format",   required_argument, nullptr, 'f', },
   { "help",     no_argument,       nullptr, 'h', },
+  { "include",  required_argument, nullptr, 'i', },
   { "mipmap",   required_argument, nullptr, 'm', },
   { "output",   required_argument, nullptr, 'o', },
   { "preview",  required_argument, nullptr, 'p', },
@@ -1314,28 +1328,34 @@ const struct option long_options[] =
   { nullptr,    no_argument,       nullptr,   0, },
 };
 
-}
-
-/** @brief Program entry point
- *  @param[in] argc Number of command-line arguments
- *  @param[in] argv Command-line arguments
- *  @retval EXIT_SUCCESS
- *  @retval EXIT_FAILURE
- */
-int main(int argc, char *argv[])
+/** @brief Parsing status */
+enum ParseStatus
 {
-  const char *prog = argv[0];
+  PARSE_SUCCESS,
+  PARSE_FAILURE,
+  PARSE_EXIT,
+};
 
+const char *prog;
+std::vector<std::string> input_files;
+
+ParseStatus parseOptions(int argc, char *argv[])
+{
   int c;
 
   // parse options
-  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:rs:vz:", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(argc, argv, "f:hi:m:o:p:q:rs:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
+      case 'a':
+        // atlas
+        process_mode = PROCESS_ATLAS;
+        break;
+
       case 'c':
         // cubemap
-        cubemap_type = CUBEMAP_CUBE;
+        process_mode = PROCESS_CUBEMAP;
         break;
 
       case 'f':
@@ -1352,7 +1372,7 @@ int main(int argc, char *argv[])
         else
         {
           std::fprintf(stderr, "Invalid format option '%s'\n", optarg);
-          return EXIT_FAILURE;
+          return PARSE_FAILURE;
         }
 
         break;
@@ -1361,7 +1381,15 @@ int main(int argc, char *argv[])
       case 'h':
         // show help
         print_usage(prog);
-        return EXIT_SUCCESS;
+        return PARSE_EXIT;
+
+      case 'i':
+      {
+        int old_optind = optind;
+        // TODO parse additional options
+        optind = old_optind;
+        break;
+      }
 
       case 'm':
       {
@@ -1377,7 +1405,7 @@ int main(int argc, char *argv[])
         else
         {
           std::fprintf(stderr, "Invalid mipmap filter type '%s'\n", optarg);
-          return EXIT_FAILURE;
+          return PARSE_FAILURE;
         }
 
         break;
@@ -1405,7 +1433,7 @@ int main(int argc, char *argv[])
         else
         {
           std::fprintf(stderr, "Invalid ETC1 quality '%s'\n", optarg);
-          return EXIT_FAILURE;
+          return PARSE_FAILURE;
         }
         break;
 
@@ -1416,13 +1444,13 @@ int main(int argc, char *argv[])
 
       case 's':
         // skybox
-        cubemap_type = CUBEMAP_SKYBOX;
+        process_mode = PROCESS_SKYBOX;
         break;
 
       case 'v':
         // print version
         print_version();
-        return EXIT_SUCCESS;
+        return PARSE_EXIT;
 
       case 'z':
       {
@@ -1433,12 +1461,15 @@ int main(int argc, char *argv[])
                            optarg);
 
         // set compression format option
-        if(it != compression_format_strings_end && strcasecmp(it->str, optarg) == 0)
+        if(it != compression_format_strings_end
+        && strcasecmp(it->str, optarg) == 0)
+        {
           compression_format = it->fmt;
+        }
         else
         {
           std::fprintf(stderr, "Invalid compression option '%s'\n", optarg);
-          return EXIT_FAILURE;
+          return PARSE_FAILURE;
         }
 
         break;
@@ -1446,14 +1477,46 @@ int main(int argc, char *argv[])
 
       default:
         std::fprintf(stderr, "Invalid option '%c'\n", optopt);
-        return EXIT_FAILURE;
+        return PARSE_FAILURE;
     }
   }
 
-  // check that a non-option was provided (input file)
-  if(optind == argc)
+  for(int i = optind; i < argc; ++optind)
+    input_files.push_back(argv[optind]);
+
+  return PARSE_SUCCESS;
+}
+
+}
+
+/** @brief Program entry point
+ *  @param[in] argc Number of command-line arguments
+ *  @param[in] argv Command-line arguments
+ *  @retval EXIT_SUCCESS
+ *  @retval EXIT_FAILURE
+ */
+int main(int argc, char *argv[])
+{
+  prog = argv[0];
+
+  setlinebuf(stdout);
+  setlinebuf(stderr);
+
+  // parse options
+  switch(parseOptions(argc, argv))
   {
-    std::fprintf(stderr, "No image provided\n");
+    case PARSE_SUCCESS:
+      break;
+    case PARSE_FAILURE:
+      return EXIT_FAILURE;
+    case PARSE_EXIT:
+      return EXIT_SUCCESS;
+  }
+
+  // check that input file(s) were provided
+  if(input_files.empty())
+  {
+    std::fprintf(stderr, "No image(s) provided\n");
     return EXIT_FAILURE;
   }
 
@@ -1465,8 +1528,23 @@ int main(int argc, char *argv[])
 
   try
   {
-    // load image
-    std::vector<Magick::Image> images = load_image(argv[optind]);
+    std::vector<Magick::Image> images;
+    if(process_mode == PROCESS_ATLAS)
+    {
+      Atlas atlas = Atlas::build(input_files);
+      subimage_data.swap(atlas.subs);
+      images = load_image(atlas.img);
+    }
+    else if(input_files.size() > 1)
+    {
+      std::fprintf(stderr, "Multiple inputs only supported with atlas mode\n");
+      return EXIT_FAILURE;
+    }
+    else
+    {
+      Magick::Image img(input_files[0]);
+      images = load_image(img);
+    }
 
     // finalize process format
     finalize_process_format(images);
