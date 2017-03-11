@@ -10,6 +10,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     -o <output>       Output file
     -p <preview>      Output preview file
     -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high
+    -r, --raw         Output image data only
     -z <compression>  Compress output. See "Compression Options"
     --cubemap         Generate a cubemap. See "Cubemap"
     --skybox          Generate a skybox. See "Skybox"
@@ -110,14 +111,14 @@ Usage: ./tex3ds [OPTIONS...] <input>
 ## Compression Options
 
 ```
-    -z none              No compression (default)
-    -z fake              Fake compression header
+    -z auto              Automatically select best compression (default)
+    -z none              No compression
     -z huff, -z huffman  Huffman encoding (possible to produce garbage)
     -z lzss, -z lz10     LZSS compression
     -z lz11              LZ11 compression
     -z rle               Run-length encoding
 
-    NOTE: All compression types (except 'none') use a GBA-style compression header: a single byte which denotes the compression type, followed by three bytes (little-endian) which specify the size of the uncompressed data.
+    NOTE: All compression types use a compression header: a single byte which denotes the compression type, followed by four bytes (little-endian) which specify the size of the uncompressed data.
 
     Types:
       0x00: Fake (uncompressed)

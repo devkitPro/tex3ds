@@ -743,7 +743,7 @@ huff_encode(const void *source,
 {
   buffer_t      result;
   bitstream_t   stream;
-  uint8_t       header[4];
+  uint8_t       header[COMPRESSION_HEADER_SIZE];
   const uint8_t *src  = (const uint8_t*)source;
   node_t        *root = build_tree(src, len);
   node_t        **lookup;

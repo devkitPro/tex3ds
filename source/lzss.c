@@ -132,8 +132,8 @@ lzss_common_encode(const uint8_t *buffer,
 #ifndef NDEBUG
   const uint8_t *end   = buffer + len;
 #endif
-  size_t        shift = 7, code_pos = 4;
-  uint8_t       header[4];
+  size_t        shift = 7, code_pos;
+  uint8_t       header[COMPRESSION_HEADER_SIZE];
 
   // get maximum match length
   const size_t max_len  = mode == LZ10 ? LZ10_MAX_LEN  : LZ11_MAX_LEN;
@@ -160,6 +160,7 @@ lzss_common_encode(const uint8_t *buffer,
   }
 
   // reserve an encode byte in output buffer
+  code_pos = result.len;
   if(buffer_push(&result, NULL, 1) != 0)
   {
     buffer_destroy(&result);
@@ -268,7 +269,7 @@ lzss_common_encode(const uint8_t *buffer,
     }
     else if(tmplen <= 0x10)
     {
-      // this is a compressed chunk in LZSS/LZ11 mode; reserve two bytes in the
+      // this is a compressed chunk in LZ11 mode; reserve two bytes in the
       // output buffer
       if(buffer_push(&result, NULL, 2) != 0)
       {
@@ -286,7 +287,7 @@ lzss_common_encode(const uint8_t *buffer,
     }
     else if(tmplen <= 0x110)
     {
-      // this is a compressed chunk in LZSS/LZ11 mode; reserve three bytes in
+      // this is a compressed chunk in LZ11 mode; reserve three bytes in
       // the output buffer
       if(buffer_push(&result, NULL, 3) != 0)
       {
@@ -305,7 +306,7 @@ lzss_common_encode(const uint8_t *buffer,
     }
     else
     {
-      // this is a compressed chunk in LZSS/LZ11 mode; reserve four bytes in
+      // this is a compressed chunk in LZ11 mode; reserve four bytes in
       // the output buffer
       if(buffer_push(&result, NULL, 4) != 0)
       {

@@ -26,8 +26,11 @@
 #include "magick_compat.h"
 #include "quantum.h"
 #include "rg_etc1.h"
+#include "subimage.h"
+#include "tex3ds.h"
 #include "thread.h"
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -45,26 +48,38 @@
 namespace
 {
 
+/** @brief Get power-of-2 ceiling
+ *  @param[in] x Value to calculate
+ *  @returns Power-of-2 ceiling
+ */
+inline size_t potCeil(size_t x)
+{
+  if(x < 8)
+    return 8;
+
+  return std::pow(2.0, std::ceil(std::log(x)/std::log(2)));
+}
+
 /** @brief Process format */
 enum ProcessFormat
 {
-  RGBA8888,  ///< RGBA8888 encoding
-  RGB888,    ///< RGB888 encoding
-  RGBA5551,  ///< RGBA5551 encoding
-  RGB565,    ///< RGB565 encoding
-  RGBA4444,  ///< RGBA4444 encoding
-  LA88,      ///< LA88 encoding
-  HILO88,    ///< HILO88 encoding
-  L8,        ///< L8 encoding
-  A8,        ///< A8 encoding
-  LA44,      ///< LA44 encoding
-  L4,        ///< L4 encoding
-  A4,        ///< A4 encoding
-  ETC1,      ///< ETC1 encoding
-  ETC1A4,    ///< ETC1A4 encoding
-  AUTO_L8,   ///< L8/LA88 encoding
-  AUTO_L4,   ///< L4/LA44 encoding
-  AUTO_ETC1, ///< ETC1/ETC1A4 encoding
+  RGBA8888 = 0x00, ///< RGBA8888 encoding
+  RGB888   = 0x01, ///< RGB888 encoding
+  RGBA5551 = 0x02, ///< RGBA5551 encoding
+  RGB565   = 0x03, ///< RGB565 encoding
+  RGBA4444 = 0x04, ///< RGBA4444 encoding
+  LA88     = 0x05, ///< LA88 encoding
+  HILO88   = 0x06, ///< HILO88 encoding
+  L8       = 0x07, ///< L8 encoding
+  A8       = 0x08, ///< A8 encoding
+  LA44     = 0x09, ///< LA44 encoding
+  L4       = 0x0A, ///< L4 encoding
+  A4       = 0x0B, ///< A4 encoding
+  ETC1     = 0x0C, ///< ETC1 encoding
+  ETC1A4   = 0x0D, ///< ETC1A4 encoding
+  AUTO_L8,         ///< L8/LA88 encoding
+  AUTO_L4,         ///< L4/LA44 encoding
+  AUTO_ETC1,       ///< ETC1/ETC1A4 encoding
 };
 
 /** @brief Process format string map */
@@ -125,11 +140,11 @@ ProcessFormatString *output_format_strings_end =
 enum CompressionFormat
 {
   COMPRESSION_NONE, ///< No compression
-  COMPRESSION_FAKE, ///< No compression, with header
   COMPRESSION_LZ10, ///< LZSS/LZ10 compression
   COMPRESSION_LZ11, ///< LZ11 compression
   COMPRESSION_RLE,  ///< Run-length encoding compression
   COMPRESSION_HUFF, ///< Huffman encoding
+  COMPRESSION_AUTO, ///< Choose best compression
 };
 
 /** @brief Compression format string map */
@@ -151,7 +166,7 @@ struct CompressionFormatString
 /** @brief Compression format strings */
 CompressionFormatString compression_format_strings[] =
 {
-  { "fake",     COMPRESSION_FAKE, },
+  { "auto",     COMPRESSION_AUTO, },
   { "huff",     COMPRESSION_HUFF, },
   { "huffman",  COMPRESSION_HUFF, },
   { "lz10",     COMPRESSION_LZ10, },
@@ -241,13 +256,28 @@ ProcessFormat process_format = RGBA8888;
 rg_etc1::etc1_quality etc1_quality = rg_etc1::cMediumQuality;
 
 /** @brief Compression format option */
-CompressionFormat compression_format = COMPRESSION_NONE;
+CompressionFormat compression_format = COMPRESSION_AUTO;
 
 /** @brief Mipmap filter type option */
 FilterType filter_type = Magick::UndefinedFilter;
 
 /** @brief Cubemap/skybox option */
 CubemapType cubemap_type = CUBEMAP_NONE;
+
+/** @brief Output subimage data */
+std::vector<SubImage> subimage_data;
+
+/** @brief Output image data */
+encode::Buffer image_data;
+
+/** @brief Output width */
+size_t output_width;
+
+/** @brief Output raw image data */
+bool output_raw = false;
+
+/** @brief Output height */
+size_t output_height;
 
 /** @brief Load image
  *  @param[in] path Input path
@@ -283,46 +313,75 @@ std::vector<Magick::Image> load_image(const char *path)
   {
     width  /= 4.0;
     height /= 3.0;
-  }
 
-  // check that sub-image width is integral
-  if(width != static_cast<size_t>(width))
+    // check that sub-image width is integral
+    if(width != static_cast<size_t>(width))
       throw std::runtime_error("Invalid width");
 
-  // check for correct texture width
-  switch(static_cast<size_t>(width))
-  {
-    case    8: case   16: case   32: case   64:
-    case  128: case  256: case  512: case 1024:
-      break;
+    // check that sub-image height is integral
+    if(height != static_cast<size_t>(height))
+      throw std::runtime_error("Invalid height");
 
-    default:
-      throw std::runtime_error("Invalid width");
+    // check for correct texture width
+    switch(static_cast<size_t>(width))
+    {
+      case    8: case   16: case   32: case   64:
+      case  128: case  256: case  512: case 1024:
+        break;
+
+      default:
+        throw std::runtime_error("Invalid width");
+    }
+
+    // check for correct texture height
+    switch(static_cast<size_t>(height))
+    {
+      case    8: case   16: case   32: case   64:
+      case  128: case  256: case  512: case 1024:
+        break;
+
+      default:
+        throw std::runtime_error("Invalid height");
+    }
   }
-
-  // check that sub-image height is integral
-  if(height != static_cast<size_t>(height))
-      throw std::runtime_error("Invalid height");
-
-  // check for correct texture height
-  switch(static_cast<size_t>(height))
+  else
   {
-    case    8: case   16: case   32: case   64:
-    case  128: case  256: case  512: case 1024:
-      break;
-
-    default:
+    // check for valid width
+    if(width > 1024)
       throw std::runtime_error("Invalid height");
+
+    // check for valid height
+    if(height > 1024)
+      throw std::runtime_error("Invalid width");
   }
 
   // Set page offsets to 0
   img.page(Magick::Geometry(img.columns(), img.rows()));
 
   std::vector<Magick::Image> result;
+
   if(cubemap_type == CUBEMAP_NONE)
   {
-    // just push the source image
-    img.comment("");
+    // expand canvas if necessary
+    if(img.columns() != potCeil(img.columns()) || img.rows() != potCeil(img.rows()))
+    {
+      Magick::Image copy = img;
+
+      img = Magick::Image(Magick::Geometry(potCeil(img.columns()), potCeil(img.rows())),
+                          transparent());
+      img.composite(copy, Magick::Geometry(0, 0),
+                    Magick::OverCompositeOp);
+
+      /// generate subimage info
+      subimage_data.push_back(SubImage(0.0f, 1.0f,
+                                       static_cast<float>(copy.columns()) / img.columns(),
+                                       1.0f - (static_cast<float>(copy.rows()) / img.rows())));
+    }
+
+    output_width  = img.columns();
+    output_height = img.rows();
+
+    // push the source image
     result.push_back(img);
   }
   else
@@ -338,7 +397,6 @@ std::vector<Magick::Image> load_image(const char *path)
       copy.flop(); // flip horizontal
     copy.flip(); // flip vertical
     copy.comment("px_");
-    copy.write("test.png");
     result.push_back(copy);
 
     // -x
@@ -515,6 +573,55 @@ std::string add_prefix(std::string path, std::string prefix)
   return prefix + path;
 }
 
+/** @brief Finalize process format
+ *  @param[in] images Input images
+ */
+void finalize_process_format(std::vector<Magick::Image> &images)
+{
+  std::vector<Magick::Image>::iterator it = images.begin();
+
+  // check each sub-image for transparency
+  while(it != images.end())
+  {
+    if(process_format == AUTO_L8)
+    {
+      if(has_alpha<8>(*it))
+      {
+        process_format = LA88;
+        break;
+      }
+    }
+    else if(process_format == AUTO_L4)
+    {
+      if(has_alpha<4>(*it))
+      {
+        process_format = LA44;
+        break;
+      }
+    }
+    else if(process_format == AUTO_ETC1)
+    {
+      if(has_alpha<4>(*it))
+      {
+        process_format = ETC1A4;
+        break;
+      }
+    }
+    else
+      break;
+
+    ++it;
+  }
+
+  // check if no transparency was found
+  if(process_format == AUTO_L8)
+    process_format = L8;
+  else if(process_format == AUTO_L4)
+    process_format = L4;
+  else if(process_format == AUTO_ETC1)
+    process_format = ETC1;
+}
+
 /** @brief Work queue */
 std::queue<encode::WorkUnit> work_queue;
 
@@ -574,13 +681,12 @@ THREAD_RETURN_T work_thread(void *param)
 /** @brief Process image
  *  @param[in] img Image to process
  */
-void process_image(Magick::Image img)
+void process_image(Magick::Image &img)
 {
   // get the image prefix
-  std::string prefix = img.comment();
+  const std::string prefix = img.comment();
 
   void (*process)(encode::WorkUnit&) = nullptr;
-  void* (*compress)(const void*,size_t,size_t*) = nullptr;
 
   // get the processing routine
   switch(process_format)
@@ -642,46 +748,10 @@ void process_image(Magick::Image img)
       break;
 
     case AUTO_L8:
-      process = encode::l8;
-      if(has_alpha<8>(img))
-        process = encode::la88;
-      break;
-
     case AUTO_L4:
-      process = encode::l4;
-      if(has_alpha<4>(img))
-        process = encode::la44;
-      break;
-
     case AUTO_ETC1:
-      process = encode::etc1;
-      if(has_alpha<4>(img))
-        process = encode::etc1a4;
-      break;
-  }
-
-  // get the compression routine
-  switch(compression_format)
-  {
-    case COMPRESSION_NONE:
-    case COMPRESSION_FAKE:
-      compress = nullptr;
-      break;
-
-    case COMPRESSION_LZ10:
-      compress = lzss_encode;
-      break;
-
-    case COMPRESSION_LZ11:
-      compress = lz11_encode;
-      break;
-
-    case COMPRESSION_RLE:
-      compress = rle_encode;
-      break;
-
-    case COMPRESSION_HUFF:
-      compress = huff_encode;
+      // should have been changed with finalize_process_format()
+      std::abort();
       break;
   }
 
@@ -736,7 +806,6 @@ void process_image(Magick::Image img)
   for(size_t i = 0; i < std::thread::hardware_concurrency(); ++i)
     workers.push_back(std::thread(work_thread, nullptr));
 
-  encode::Buffer buf;
   size_t voff = 0; // vertical offset for mipmap preview
   size_t hoff = 0; // horizontal offset for mipmap preview
 
@@ -807,7 +876,7 @@ void process_image(Magick::Image img)
       mutex.unlock();
 
       // append the result's output buffer
-      buf.insert(buf.end(), result.begin(), result.end());
+      image_data.insert(image_data.end(), result.begin(), result.end());
 
       mutex.lock();
     }
@@ -862,45 +931,19 @@ void process_image(Magick::Image img)
       }
     }
   }
+}
 
-  // check if we need to output the data
-  if(output_path.empty())
-    return;
+/** @brief Write buffer
+ *  @param[in] fp File handle
+ */
+void write_buffer(FILE *fp, const void *buffer, size_t size)
+{
+  const uint8_t *buf = static_cast<const uint8_t*>(buffer);
+  size_t        pos  = 0;
 
-  // check compression header
-  if(compression_format != COMPRESSION_NONE && buf.size() > 0xFFFFFF)
-    std::fprintf(stderr, "Warning: output size exceeds compression header limit\n");
-
-  FILE *fp = std::fopen(add_prefix(output_path, prefix).c_str(), "wb");
-  if(!fp)
-    throw std::runtime_error("Failed to open output file");
-
-  if(compression_format == COMPRESSION_FAKE)
+  while(pos < size)
   {
-    // write fake compression header
-    uint8_t header[4];
-    compression_header(header, 0x00, buf.size());
-    std::fwrite(header, 1, sizeof(header), fp);
-  }
-
-  size_t  outlen  = buf.size();
-  uint8_t *buffer = &buf[0];
-  if(compress)
-  {
-    // compress data
-    buffer = reinterpret_cast<uint8_t*>(compress(&buf[0], buf.size(), &outlen));
-    if(!buffer)
-    {
-      std::fclose(fp);
-      throw std::runtime_error("Failed to compress data");
-    }
-  }
-
-  // output data
-  size_t  pos = 0;
-  while(pos < outlen)
-  {
-    ssize_t rc = std::fwrite(buffer+pos, 1, outlen-pos, fp);
+    ssize_t rc = std::fwrite(buf+pos, 1, size-pos, fp);
     if(rc <= 0)
     {
       std::fclose(fp);
@@ -909,13 +952,208 @@ void process_image(Magick::Image img)
 
     pos += rc;
   }
+}
+
+/** @brief Write Tex3DS header
+ *  @param[in] fp File handle
+ */
+void write_tex3ds_header(FILE *fp)
+{
+  encode::Buffer buf;
+
+  encode::encode<uint16_t>(subimage_data.size(), buf);
+
+  uint8_t texture_params = 0;
+
+  assert(output_width  >= 8);
+  assert(output_width  <= 1024);
+  assert(output_height >= 8);
+  assert(output_height <= 1024);
+
+  uint8_t w = std::log(static_cast<double>(output_width))  / std::log(2.0);
+  uint8_t h = std::log(static_cast<double>(output_height)) / std::log(2.0);
+
+  assert(w >= 3);
+  assert(w <= 10);
+  assert(h >= 3);
+  assert(h <= 10);
+
+  texture_params |= (w - 3) << 0;
+  texture_params |= (h - 3) << 3;
+
+  if(cubemap_type != CUBEMAP_NONE)
+    texture_params |= 1 << 6;
+
+  encode::encode<uint8_t>(texture_params, buf);
+  encode::encode<uint8_t>(process_format, buf);
+
+  uint8_t num_mipmaps = std::min(w, h) - 3;
+  if(filter_type == Magick::UndefinedFilter)
+    num_mipmaps = 0;
+  encode::encode<uint8_t>(num_mipmaps, buf);
+
+  // encode subimage info
+  for(size_t i = 0; i < subimage_data.size(); ++i)
+  {
+    const SubImage &sub = subimage_data[i];
+
+    uint16_t width  = (sub.right - sub.left) * output_width;
+    uint16_t height = (sub.top - sub.bottom) * output_height;
+
+    // check if subimage is rotated
+    if(sub.top < sub.bottom)
+      std::swap(width, height);
+
+    encode::encode(sub, width, height, buf);
+  }
+
+  write_buffer(fp, &buf[0], buf.size());
+}
+
+/** @brief Dummy compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns "Compressed" buffer
+ */
+void* compress_none(const void *src, size_t len, size_t *outlen)
+{
+  // pad to 4 bytes
+  size_t padded_len = ((len+COMPRESSION_HEADER_SIZE) + 3) & ~3;
+
+  uint8_t *output = static_cast<uint8_t*>(std::malloc(padded_len));
+  if(!output)
+    return nullptr;
+
+  compression_header(output, 0x00, len);
+  std::memcpy(output+COMPRESSION_HEADER_SIZE, src, len);
+  *outlen = padded_len;
+
+  return output;
+}
+
+/** @brief Auto-select compression
+ *  @param[in]  src    Source buffer
+ *  @param[in]  len    Source length
+ *  @param[out] outlen Output length
+ *  @returns Compressed buffer
+ */
+void* compress_auto(const void *src, size_t len, size_t *outlen)
+{
+  void   *best_output = nullptr;
+  size_t best_outlen = SIZE_MAX;
+
+  static void* (* const compress[])(const void*,size_t,size_t*) =
+  {
+    compress_none,
+    lzss_encode,
+    lz11_encode,
+    //huff_encode, // broken
+    rle_encode,
+  };
+
+  for(size_t i = 0; i < ARRAY_COUNT(compress); ++i)
+  {
+    size_t outlen;
+    void   *output = compress[i](src, len, &outlen);
+
+    if(output && outlen < best_outlen)
+    {
+      std::free(best_output);
+      best_output = output;
+      best_outlen = outlen;
+    }
+    else
+      std::free(output);
+  }
+
+  *outlen = best_outlen;
+  return best_output;
+}
+
+/** @brief Write image data
+ *  @param[in] fp File handle
+ */
+void write_image_data(FILE *fp)
+{
+  void* (*compress)(const void*,size_t,size_t*) = nullptr;
+
+  // get the compression routine
+  switch(compression_format)
+  {
+    case COMPRESSION_NONE:
+      compress = compress_none;
+      break;
+
+    case COMPRESSION_LZ10:
+      compress = lzss_encode;
+      break;
+
+    case COMPRESSION_LZ11:
+      compress = lz11_encode;
+      break;
+
+    case COMPRESSION_RLE:
+      compress = rle_encode;
+      break;
+
+    case COMPRESSION_HUFF:
+      compress = huff_encode;
+      break;
+
+    case COMPRESSION_AUTO:
+      compress = compress_auto;
+      break;
+
+    default:
+      // We should only get a valid type here
+      std::abort();
+  }
+
+  // compress data
+  size_t  outlen;
+  uint8_t *buffer = reinterpret_cast<uint8_t*>(compress(image_data.data(), image_data.size(), &outlen));
+  if(!buffer)
+  {
+    std::fclose(fp);
+    throw std::runtime_error("Failed to compress data");
+  }
+
+  // output data
+  try
+  {
+    write_buffer(fp, buffer, outlen);
+
+    // free compressed buffer
+    std::free(buffer);
+  }
+  catch(...)
+  {
+    // free compressed buffer
+    std::free(buffer);
+    throw;
+  }
+}
+
+/** @brief Write output data
+ */
+void write_output_data()
+{
+  // check if we need to output the data
+  if(output_path.empty())
+    return;
+
+  FILE *fp = std::fopen(output_path.c_str(), "wb");
+  if(!fp)
+    throw std::runtime_error("Failed to open output file");
+
+  if(!output_raw)
+    write_tex3ds_header(fp);
+
+  write_image_data(fp);
 
   // close output file
   std::fclose(fp);
-
-  // free compressed buffer
-  if(buffer != &buf[0])
-    std::free(buffer);
 }
 
 /** @brief Print version information */
@@ -953,6 +1191,7 @@ void print_usage(const char *prog)
     "    -o <output>       Output file\n"
     "    -p <preview>      Output preview file\n"
     "    -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
+    "    -r, --raw         Output image data only\n"
     "    -z <compression>  Compress output. See \"Compression Options\"\n"
     "    --cubemap         Generate a cubemap. See \"Cubemap\"\n"
     "    --skybox          Generate a skybox. See \"Skybox\"\n"
@@ -1017,14 +1256,14 @@ void print_usage(const char *prog)
 
     std::printf("\n"
     "  Compression Options:\n"
-    "    -z none              No compression (default)\n"
-    "    -z fake              Fake compression header\n"
+    "    -z auto              Automatically select best compression (default)\n"
+    "    -z none              No compression\n"
     "    -z huff, -z huffman  Huffman encoding (possible to produce garbage)\n"
     "    -z lzss, -z lz10     LZSS compression\n"
     "    -z lz11              LZ11 compression\n"
     "    -z rle               Run-length encoding\n\n"
 
-    "    NOTE: All compression types (except 'none') use a GBA-style compression header: a single byte which denotes the compression type, followed by three bytes (little-endian) which specify the size of the uncompressed data.\n\n"
+    "    NOTE: All compression types use a compression header: a single byte which denotes the compression type, followed by four bytes (little-endian) which specify the size of the uncompressed data.\n\n"
 
     "    Types:\n"
     "      0x00: Fake (uncompressed)\n"
@@ -1062,6 +1301,7 @@ const struct option long_options[] =
   { "format",   required_argument, nullptr, 'f', },
   { "output",   required_argument, nullptr, 'o', },
   { "quality",  required_argument, nullptr, 'q', },
+  { "raw",      no_argument,       nullptr, 'r', },
   { "skybox",   no_argument,       nullptr, 's', },
   { "version",  no_argument,       nullptr, 'v', },
   { "compress", required_argument, nullptr, 'z', },
@@ -1083,7 +1323,7 @@ int main(int argc, char *argv[])
   int c;
 
   // parse options
-  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:s:vz:", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:rs:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
@@ -1163,6 +1403,11 @@ int main(int argc, char *argv[])
         }
         break;
 
+      case 'r':
+        // output raw image data
+        output_raw = true;
+        break;
+
       case 's':
         // skybox
         cubemap_type = CUBEMAP_SKYBOX;
@@ -1214,12 +1459,18 @@ int main(int argc, char *argv[])
 
   try
   {
-    // load mipmap images
+    // load image
     std::vector<Magick::Image> images = load_image(argv[optind]);
 
-    // process each mipmap image
+    // finalize process format
+    finalize_process_format(images);
+
+    // process each sub-image
     for(size_t i = 0; i < images.size(); ++i)
       process_image(images[i]);
+
+    // write output data
+    write_output_data();
   }
   catch(const std::exception &e)
   {

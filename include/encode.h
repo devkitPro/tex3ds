@@ -27,6 +27,7 @@
 #include "compat.h"
 #include "magick_compat.h"
 #include "rg_etc1.h"
+#include "subimage.h"
 #include <vector>
 
 /** @namespace encode
@@ -37,6 +38,76 @@ namespace encode
 
 /** @brief Data buffer */
 typedef std::vector<uint8_t> Buffer;
+
+/** @brief Encode data
+ *  @tparam     T   Type to encode
+ *  @param[in]  in  Data to encode
+ *  @param[out] out Output buffer
+ */
+template<typename T>
+inline void encode(const T &in, Buffer &out);
+
+/** @brief Encode uint8_t
+ *  @param[in]  in  Data to encode
+ *  @param[out] out Output buffer
+ */
+template<> inline void
+encode<uint8_t>(const uint8_t &in, Buffer &out)
+{
+  out.push_back(in);
+}
+
+/** @brief Encode uint16_t
+ *  @param[in]  in  Data to encode
+ *  @param[out] out Output buffer
+ */
+template<> inline void
+encode<uint16_t>(const uint16_t &in, Buffer &out)
+{
+  out.push_back(in >> 0);
+  out.push_back(in >> 8);
+}
+
+/** @brief Encode uint32_t
+ *  @param[in]  in  Data to encode
+ *  @param[out] out Output buffer
+ */
+template<> inline void
+encode<uint32_t>(const uint32_t &in, Buffer &out)
+{
+  out.push_back(in >> 0);
+  out.push_back(in >> 8);
+  out.push_back(in >> 16);
+  out.push_back(in >> 24);
+}
+
+/** @brief Encode float
+ *  @param[in]  in  Data to encode
+ *  @param[out] out Output buffer
+ */
+template<> inline void
+encode<float>(const float &in, Buffer &out)
+{
+  encode<uint16_t>(in * 1024, out);
+}
+
+/** @brief Encode sub-image
+ *  @param[in]  sub    Sub-image to encode
+ *  @param[in]  width  Sub-image width (pixels)
+ *  @param[in]  height Sub-image height (pixels)
+ *  @param[out] out    Output buffer
+ */
+inline void
+encode(const SubImage &sub, uint16_t width, uint16_t height, Buffer &out)
+{
+  encode<uint16_t>(width,  out);
+  encode<uint16_t>(height, out);
+
+  encode<float>(sub.left,   out);
+  encode<float>(sub.top,    out);
+  encode<float>(sub.right,  out);
+  encode<float>(sub.bottom, out);
+}
 
 /** @brief Work unit
  *

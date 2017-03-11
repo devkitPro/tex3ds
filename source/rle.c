@@ -47,7 +47,7 @@ rle_encode(const void *source,
   const uint8_t *save = src, *end = src + len;
   buffer_t      result;
   size_t        save_len = 0, run;
-  uint8_t       header[4];
+  uint8_t       header[COMPRESSION_HEADER_SIZE];
 
   // initialize output buffer
   buffer_init(&result);
