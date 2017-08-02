@@ -32,6 +32,16 @@
 
 #define RG_ETC1_ASSERT assert
 
+namespace
+{
+   template<typename T> inline T abs_diff(T a, T b)
+   {
+      if(a > b)
+         return a - b;
+      return b - a;
+   }
+}
+
 namespace rg_etc1
 {
    const uint32_t cUINT32_MAX = 0xFFFFFFFFU;
@@ -1797,7 +1807,7 @@ namespace rg_etc1
          {
             if (block_inten[0] > m_pSorted_luma[n - 1])
             {
-               const uint32_t min_error = std::abs(block_inten[0] - m_pSorted_luma[n - 1]);
+               const uint32_t min_error = abs_diff(block_inten[0], m_pSorted_luma[n - 1]);
                if (min_error >= trial_solution.m_error)
                   continue;
             }
@@ -1811,7 +1821,7 @@ namespace rg_etc1
          {
             if (m_pSorted_luma[0] > block_inten[3])
             {
-               const uint32_t min_error = std::abs(m_pSorted_luma[0] - block_inten[3]);
+               const uint32_t min_error = abs_diff(m_pSorted_luma[0], block_inten[3]);
                if (min_error >= trial_solution.m_error)
                   continue;
             }
@@ -1901,8 +1911,8 @@ done:
                   uint32_t best_error = cUINT32_MAX, best_packed_c = 0;
                   for (uint32_t packed_c = 0; packed_c < limit; packed_c++)
                   {
-                     int v = etc1_decode_value(diff, inten, selector, packed_c);
-                     uint32_t err = std::abs(v - static_cast<int>(color));
+                     uint32_t v = etc1_decode_value(diff, inten, selector, packed_c);
+                     uint32_t err = abs_diff(v, color);
                      if (err < best_error)
                      {
                         best_error = err;
