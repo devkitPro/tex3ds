@@ -13,6 +13,5 @@ tex3ds_SOURCES = source/encode.cpp \
                  source/rle.c
 
 tex3ds_LDADD = $(ImageMagick_LIBS)
-AM_CPPFLAGS   = -Iinclude -D_GNU_SOURCE $(ImageMagick_CFLAGS)
-
+AM_CPPFLAGS   = -I$(srcdir)/include -D_GNU_SOURCE $(ImageMagick_CFLAGS)
 EXTRA_DIST = autogen.sh

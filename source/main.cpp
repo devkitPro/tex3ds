@@ -20,15 +20,6 @@
 /** @file main.cpp
  *  @brief Program entry point
  */
-#include "compat.h"
-#include "compress.h"
-#include "encode.h"
-#include "magick_compat.h"
-#include "quantum.h"
-#include "rg_etc1.h"
-#include "subimage.h"
-#include "tex3ds.h"
-#include "thread.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -38,6 +29,16 @@
 #include <stdexcept>
 #include <vector>
 #include <getopt.h>
+
+#include "compat.h"
+#include "compress.h"
+#include "encode.h"
+#include "magick_compat.h"
+#include "quantum.h"
+#include "rg_etc1.h"
+#include "subimage.h"
+#include "tex3ds.h"
+#include "thread.h"
 
 /** @brief Get number of elements in an array
  *  @param[in] x Array to count

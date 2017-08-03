@@ -50,8 +50,6 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
 AC_CHECK_FUNCS([memrchr memset pow strcasecmp])
 
 AC_CONFIG_FILES([Makefile])

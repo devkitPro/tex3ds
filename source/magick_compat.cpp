@@ -20,8 +20,8 @@
 /** @file magick_compat.cpp
  *  @brief ImageMagick compatibility routines
  */
-#include "magick_compat.h"
 #include <cassert>
+#include "magick_compat.h"
 
 #if MagickLibVersion >= 0x700
 /*------------------------------------------------------------------------------

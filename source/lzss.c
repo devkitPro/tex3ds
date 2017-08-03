@@ -49,6 +49,26 @@ typedef enum
   LZ11, ///< LZ11 compression
 } lzss_mode_t;
 
+
+#ifndef HAVE_MEMRCHR
+
+
+#include <string.h>
+
+void *memrchr (const void *block, int c, size_t size)
+{
+  const unsigned char *p = block;
+
+  if (size && block)
+  {
+    for (p += size - 1; size; p--, size--)
+      if (*p == (unsigned char)c)
+        return (void *)p;
+  }
+  return NULL;
+}
+#endif /* HAVE_MEMRCHR */
+
 /** @brief Find best buffer match
  *  @param[in]  start     Input buffer
  *  @param[in]  buffer    Encoding buffer
