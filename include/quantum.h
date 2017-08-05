@@ -21,6 +21,8 @@
  *  @brief Magick::Quantum conversions
  */
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include "magick_compat.h"
 
 namespace
