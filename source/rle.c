@@ -46,17 +46,17 @@ rle_encode(const void *source,
   const uint8_t *src = (const uint8_t*)source;
   const uint8_t *save = src, *end = src + len;
   buffer_t      result;
-  size_t        save_len = 0, run;
+  size_t        save_len = 0, run, header_size;
   uint8_t       header[COMPRESSION_HEADER_SIZE];
 
   // initialize output buffer
   buffer_init(&result);
 
   // fill compression header
-  compression_header(header, 0x30, len);
+  header_size = compression_header(header, 0x30, len);
 
   // append compression header to output data
-  if(buffer_push(&result, header, sizeof(header)) != 0)
+  if(buffer_push(&result, header, header_size) != 0)
   {
     buffer_destroy(&result);
     return NULL;

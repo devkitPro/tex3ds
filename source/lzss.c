@@ -152,7 +152,7 @@ lzss_common_encode(const uint8_t *buffer,
 #ifndef NDEBUG
   const uint8_t *end   = buffer + len;
 #endif
-  size_t        shift = 7, code_pos;
+  size_t        shift = 7, code_pos, header_size;
   uint8_t       header[COMPRESSION_HEADER_SIZE];
 
   // get maximum match length
@@ -165,15 +165,15 @@ lzss_common_encode(const uint8_t *buffer,
 
   // fill compression header
   if(mode == LZ10)
-    compression_header(header, 0x10, len);
+    header_size = compression_header(header, 0x10, len);
   else
-    compression_header(header, 0x11, len);
+    header_size = compression_header(header, 0x11, len);
 
   // initialize output buffer
   buffer_init(&result);
 
   // append compression header to output buffer
-  if(buffer_push(&result, header, sizeof(header)) != 0)
+  if(buffer_push(&result, header, header_size) != 0)
   {
     buffer_destroy(&result);
     return NULL;

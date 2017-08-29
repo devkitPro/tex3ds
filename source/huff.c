@@ -749,10 +749,10 @@ huff_encode(const void *source,
   node_t        **lookup;
   uint8_t       *tree;
   bitmap_t      *bitmap;
-  size_t        count;
+  size_t        count, header_size;
 
   // fill compression header
-  compression_header(header, 0x28, len);
+  header_size = compression_header(header, 0x28, len);
 
   if(!root)
     return NULL;
@@ -829,7 +829,7 @@ huff_encode(const void *source,
   bitstream_init(&stream, &result);
 
   // append compression header and Huffman tree to output data
-  if(buffer_push(&result, header, sizeof(header)) != 0
+  if(buffer_push(&result, header, header_size) != 0
   || buffer_push(&result, tree, (count+2) & ~1) != 0)
   {
     buffer_destroy(&result);
