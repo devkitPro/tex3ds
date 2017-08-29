@@ -118,7 +118,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     -z lz11              LZ11 compression
     -z rle               Run-length encoding
 
-    NOTE: All compression types use a compression header: a single byte which denotes the compression type, followed by four bytes (little-endian) which specify the size of the uncompressed data.
+    NOTE: All compression types use a compression header: a single byte which denotes the compression type, followed by three bytes (little-endian) which specify the size of the uncompressed data. If the compression type byte has the MSB (0x80) set, the size is specified by four bytes (little-endian) plus three bytes of reserved (zero) padding.
 
     Types:
       0x00: Fake (uncompressed)
