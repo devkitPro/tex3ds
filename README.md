@@ -14,6 +14,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     -r, --raw                    Output image data only
     -v, --version                Show version and copyright information
     -z, --compress <compression> Compress output. See "Compression Options"
+    --atlas                      Generate texture atlas
     --cubemap                    Generate a cubemap. See "Cubemap"
     --skybox                     Generate a skybox. See "Skybox"
     <input>                      Input file
