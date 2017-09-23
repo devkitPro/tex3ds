@@ -1316,7 +1316,6 @@ const struct option long_options[] =
   { "cubemap",  no_argument,       nullptr, 'c', },
   { "format",   required_argument, nullptr, 'f', },
   { "help",     no_argument,       nullptr, 'h', },
-  { "include",  required_argument, nullptr, 'i', },
   { "mipmap",   required_argument, nullptr, 'm', },
   { "output",   required_argument, nullptr, 'o', },
   { "preview",  required_argument, nullptr, 'p', },
@@ -1344,7 +1343,7 @@ ParseStatus parseOptions(int argc, char *argv[])
   int c;
 
   // parse options
-  while((c = ::getopt_long(argc, argv, "f:hi:m:o:p:q:rs:vz:", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:rs:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
@@ -1382,14 +1381,6 @@ ParseStatus parseOptions(int argc, char *argv[])
         // show help
         print_usage(prog);
         return PARSE_EXIT;
-
-      case 'i':
-      {
-        int old_optind = optind;
-        // TODO parse additional options
-        optind = old_optind;
-        break;
-      }
 
       case 'm':
       {
