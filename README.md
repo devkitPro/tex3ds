@@ -7,7 +7,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
   Options:
     -f, --format <format>        See "Format Options"
     -h, --help                   Show this help message
-    -m <filter>                  Generate mipmaps. See "Mipmap Filter Options"
+    -m, --mipmap <filter>        Generate mipmaps. See "Mipmap Filter Options"
     -o, --output <output>        Output file
     -p, --preview <preview>      Output preview file
     -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high

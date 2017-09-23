@@ -1189,7 +1189,7 @@ void print_usage(const char *prog)
     "  Options:\n"
     "    -f, --format <format>        See \"Format Options\"\n"
     "    -h, --help                   Show this help message\n"
-    "    -m <filter>                  Generate mipmaps. See \"Mipmap Filter Options\"\n"
+    "    -m, --mipmap <filter>        Generate mipmaps. See \"Mipmap Filter Options\"\n"
     "    -o, --output <output>        Output file\n"
     "    -p, --preview <preview>      Output preview file\n"
     "    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
@@ -1303,6 +1303,7 @@ const struct option long_options[] =
   { "cubemap",  no_argument,       nullptr, 'c', },
   { "format",   required_argument, nullptr, 'f', },
   { "help",     no_argument,       nullptr, 'h', },
+  { "mipmap",   required_argument, nullptr, 'm', },
   { "output",   required_argument, nullptr, 'o', },
   { "preview",  required_argument, nullptr, 'p', },
   { "quality",  required_argument, nullptr, 'q', },
