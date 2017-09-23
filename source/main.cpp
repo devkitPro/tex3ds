@@ -1187,16 +1187,18 @@ void print_usage(const char *prog)
 
   std::printf(
     "  Options:\n"
-    "    -f <format>       See \"Format Options\"\n"
-    "    -m <filter>       Generate mipmaps. See \"Mipmap Filter Options\"\n"
-    "    -o <output>       Output file\n"
-    "    -p <preview>      Output preview file\n"
-    "    -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
-    "    -r, --raw         Output image data only\n"
-    "    -z <compression>  Compress output. See \"Compression Options\"\n"
-    "    --cubemap         Generate a cubemap. See \"Cubemap\"\n"
-    "    --skybox          Generate a skybox. See \"Skybox\"\n"
-    "    <input>           Input file\n\n"
+    "    -f, --format <format>        See \"Format Options\"\n"
+    "    -h, --help                   Show this help message\n"
+    "    -m <filter>                  Generate mipmaps. See \"Mipmap Filter Options\"\n"
+    "    -o, --output <output>        Output file\n"
+    "    -p, --preview <preview>      Output preview file\n"
+    "    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
+    "    -r, --raw                    Output image data only\n"
+    "    -v, --version                Show version and copyright information\n"
+    "    -z, --compress <compression> Compress output. See \"Compression Options\"\n"
+    "    --cubemap                    Generate a cubemap. See \"Cubemap\"\n"
+    "    --skybox                     Generate a skybox. See \"Skybox\"\n"
+    "    <input>                      Input file\n\n"
 
     "  Format Options:\n"
     "    -f rgba, -f rgba8, -f rgba8888\n"
@@ -1278,7 +1280,7 @@ void print_usage(const char *prog)
     "    +----+----+---------+\n"
     "    |    | +Y |         |\n"
     "    +----+----+----+----+\n"
-    "    | -X | +Z | -X | -Z |\n"
+    "    | -X | +Z | +X | -Z |\n"
     "    +----+----+----+----+\n"
     "    |    | -Y |         |\n"
     "    +----+----+---------+\n\n"
@@ -1288,7 +1290,7 @@ void print_usage(const char *prog)
     "    +----+----+---------+\n"
     "    |    | +Y |         |\n"
     "    +----+----+----+----+\n"
-    "    | -X | -Z | -X | +Z |\n"
+    "    | -X | -Z | +X | +Z |\n"
     "    +----+----+----+----+\n"
     "    |    | -Y |         |\n"
     "    +----+----+---------+\n\n"
@@ -1300,7 +1302,9 @@ const struct option long_options[] =
 {
   { "cubemap",  no_argument,       nullptr, 'c', },
   { "format",   required_argument, nullptr, 'f', },
+  { "help",     no_argument,       nullptr, 'h', },
   { "output",   required_argument, nullptr, 'o', },
+  { "preview",  required_argument, nullptr, 'p', },
   { "quality",  required_argument, nullptr, 'q', },
   { "raw",      no_argument,       nullptr, 'r', },
   { "skybox",   no_argument,       nullptr, 's', },

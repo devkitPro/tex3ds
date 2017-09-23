@@ -5,16 +5,18 @@
 ```
 Usage: ./tex3ds [OPTIONS...] <input>
   Options:
-    -f <format>       See "Format Options"
-    -m <filter>       Generate mipmaps. See "Mipmap Filter Options"
-    -o <output>       Output file
-    -p <preview>      Output preview file
-    -q <etc1-quality> ETC1 quality. Valid options: low, medium (default), high
-    -r, --raw         Output image data only
-    -z <compression>  Compress output. See "Compression Options"
-    --cubemap         Generate a cubemap. See "Cubemap"
-    --skybox          Generate a skybox. See "Skybox"
-    <input>           Input file
+    -f, --format <format>        See "Format Options"
+    -h, --help                   Show this help message
+    -m <filter>                  Generate mipmaps. See "Mipmap Filter Options"
+    -o, --output <output>        Output file
+    -p, --preview <preview>      Output preview file
+    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high
+    -r, --raw                    Output image data only
+    -v, --version                Show version and copyright information
+    -z, --compress <compression> Compress output. See "Compression Options"
+    --cubemap                    Generate a cubemap. See "Cubemap"
+    --skybox                     Generate a skybox. See "Skybox"
+    <input>                      Input file
 ```
 
 ## Format Options
@@ -135,7 +137,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     +----+----+---------+
     |    | +Y |         |
     +----+----+----+----+
-    | -X | +Z | -X | -Z |
+    | -X | +Z | +X | -Z |
     +----+----+----+----+
     |    | -Y |         |
     +----+----+---------+
@@ -148,7 +150,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     +----+----+---------+
     |    | +Y |         |
     +----+----+----+----+
-    | -X | -Z | -X | +Z |
+    | -X | -Z | +X | +Z |
     +----+----+----+----+
     |    | -Y |         |
     +----+----+---------+
