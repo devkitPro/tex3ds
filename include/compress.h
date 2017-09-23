@@ -23,7 +23,7 @@
 #pragma once
 
 /** @brief Compression header size */
-#define COMPRESSION_HEADER_SIZE 5
+#define COMPRESSION_HEADER_SIZE 8
 
 #include "compat.h"
 #ifdef __cplusplus
@@ -106,15 +106,26 @@ void  huff_decode(const void *src, void *dst, size_t len);
  *  @param[out] header Output header
  *  @param[in]  type   Compression type
  *  @param[in]  size   Uncompressed data size
+ *  @returns Size of the compression header
  */
-static inline void
+static inline size_t
 compression_header(uint8_t header[COMPRESSION_HEADER_SIZE], uint8_t type, size_t size)
 {
   header[0] = type;
   header[1] = size;
   header[2] = size >> 8;
   header[3] = size >> 16;
-  header[4] = size >> 24;
+  if(size >= 0x1000000)
+  {
+    header[0] |= 0x80;
+    header[4] = size >> 24;
+    header[5] = 0; /* Reserved */
+    header[6] = 0; /* Reserved */
+    header[7] = 0; /* Reserved */
+    return 8;
+  }
+  else
+    return 4;
 }
 
 #ifdef COMPRESSION_INTERNAL
