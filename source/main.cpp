@@ -1472,8 +1472,8 @@ ParseStatus parseOptions(int argc, char *argv[])
     }
   }
 
-  for(int i = optind; i < argc; ++optind)
-    input_files.push_back(argv[optind]);
+  while(optind < argc)
+    input_files.push_back(argv[optind++]);
 
   return PARSE_SUCCESS;
 }
