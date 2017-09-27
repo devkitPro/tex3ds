@@ -1007,12 +1007,20 @@ void write_tex3ds_header(FILE *fp)
   {
     const SubImage &sub = subimage_data[i];
 
-    uint16_t width  = (sub.right - sub.left) * output_width;
-    uint16_t height = (sub.top - sub.bottom) * output_height;
+    uint16_t width;
+    uint16_t height;
 
     // check if subimage is rotated
     if(sub.top < sub.bottom)
-      std::swap(width, height);
+    {
+      height = (sub.bottom - sub.top) * output_width;
+      width  = (sub.right - sub.left) * output_height;
+    }
+    else
+    {
+      width  = (sub.right - sub.left) * output_width;
+      height = (sub.top - sub.bottom) * output_height;
+    }
 
     encode::encode(sub, width, height, buf);
   }
