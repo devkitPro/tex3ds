@@ -24,6 +24,7 @@
 #include "magick_compat.h"
 #include <string>
 #include <vector>
+#include <libgen.h>
 
 struct SubImage
 {
@@ -35,8 +36,12 @@ struct SubImage
   float       bottom; ///< Bottom v-coordinate
 
   SubImage(size_t index, const std::string &name, float left, float top, float right, float bottom)
-  : index(index), name(name), left(left), top(top), right(right), bottom(bottom)
-  { }
+  : index(index), left(left), top(top), right(right), bottom(bottom)
+  {
+    std::vector<char> path(name.begin(), name.end());
+    path.push_back(0);
+    this->name = ::basename(path.data());
+  }
 
   bool operator<(const SubImage &rhs) const
   {
