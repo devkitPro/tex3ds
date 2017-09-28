@@ -20,16 +20,17 @@ typedef std::pair<size_t,size_t> XY;
 
 struct Block
 {
+  size_t        index;
   Magick::Image img;
   XY            xy;
   size_t        x, y, w, h;
 
-  Block(const Magick::Image &img, size_t x, size_t y, size_t w, size_t h)
-  : img(img), x(x), y(y), w(w), h(h)
+  Block(size_t index, const Magick::Image &img, size_t x, size_t y, size_t w, size_t h)
+  : index(index), img(img), x(x), y(y), w(w), h(h)
   { }
 
-  Block(const Magick::Image &img)
-  : img(img), x(0), y(0), w(img.columns()), h(img.rows())
+  Block(size_t index, const Magick::Image &img)
+  : index(index), img(img), x(0), y(0), w(img.columns()), h(img.rows())
   { }
 
   SubImage subImage(const Magick::Image &atlas) const
@@ -40,10 +41,10 @@ struct Block
     float bottom = 1.0f - (static_cast<float>(y+h) / atlas.rows());
 
     if(img.columns() == w && img.rows() == h)
-      return SubImage(img.fileName(), left, top, right, bottom);
+      return SubImage(index, img.fileName(), left, top, right, bottom);
 
     // rotated
-    return SubImage(img.fileName(), bottom, left, top, right);
+    return SubImage(index, img.fileName(), bottom, left, top, right);
   }
 
   bool operator<(const Block &other) const
@@ -69,7 +70,7 @@ struct Packer
 
   size_t width, height;
 
-  Packer(std::vector<Magick::Image> images, size_t width, size_t height);
+  Packer(const std::vector<Magick::Image> &images, size_t width, size_t height);
 
   Magick::Image composite() const
   {
@@ -141,10 +142,15 @@ struct Packer
   }
 };
 
-Packer::Packer(std::vector<Magick::Image> images, size_t width, size_t height)
+Packer::Packer(const std::vector<Magick::Image> &images, size_t width, size_t height)
 : placed(), next(), free(), width(width), height(height)
 {
-  next.assign(images.begin(), images.end());
+  for(std::vector<Magick::Image>::const_iterator it = images.begin();
+      it != images.end(); ++it)
+  {
+    next.push_back(Block(std::stoul(it->attribute("index")), *it));
+  }
+
   free.insert(XY(0, 0));
 }
 
@@ -321,7 +327,11 @@ Atlas Atlas::build(const std::vector<std::string> &paths)
   std::vector<Magick::Image> images;
 
   for(size_t i = 0; i < paths.size(); ++i)
-    images.push_back(Magick::Image(paths[i]));
+  {
+    Magick::Image img(paths[i]);
+    img.attribute("index", std::to_string(i));
+    images.push_back(img);
+  }
 
   std::sort(images.begin(), images.end(), AreaSizeComparator());
 
@@ -351,7 +361,7 @@ Atlas Atlas::build(const std::vector<std::string> &paths)
       for(auto &it: packers[i].placed)
         atlas.subs.push_back(it.subImage(atlas.img));
 
-      atlas.img.write("/tmp/atlas.png");
+      std::sort(atlas.subs.begin(), atlas.subs.end());
       return atlas;
     }
   }

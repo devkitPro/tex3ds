@@ -379,7 +379,7 @@ std::vector<Magick::Image> load_image(Magick::Image &img)
 
       // generate subimage info
       subimage_data.push_back(
-        SubImage("", 0.0f, 1.0f,
+        SubImage(0, "", 0.0f, 1.0f,
                  static_cast<float>(copy.columns()) / img.columns(),
                  1.0f - (static_cast<float>(copy.rows()) / img.rows())));
     }

@@ -27,13 +27,19 @@
 
 struct SubImage
 {
+  size_t      index;  ///< Sorting order
   std::string name;   ///< Sub-image name
   float       left;   ///< Left u-coordinate
   float       top;    ///< Top v-coordinate
   float       right;  ///< Right u-coordinate
   float       bottom; ///< Bottom v-coordinate
 
-  SubImage(const std::string &name, float left, float top, float right, float bottom)
-  : name(name), left(left), top(top), right(right), bottom(bottom)
+  SubImage(size_t index, const std::string &name, float left, float top, float right, float bottom)
+  : index(index), name(name), left(left), top(top), right(right), bottom(bottom)
   { }
+
+  bool operator<(const SubImage &rhs) const
+  {
+    return index < rhs.index;
+  }
 };
