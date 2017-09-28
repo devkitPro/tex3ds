@@ -7,6 +7,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
   Options:
     -f, --format <format>        See "Format Options"
     -h, --help                   Show this help message
+    -i, --include <file>         Include options from file
     -m, --mipmap <filter>        Generate mipmaps. See "Mipmap Filter Options"
     -o, --output <output>        Output file
     -p, --preview <preview>      Output preview file

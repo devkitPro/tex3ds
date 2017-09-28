@@ -22,6 +22,7 @@
  */
 #include <algorithm>
 #include <cassert>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -29,6 +30,8 @@
 #include <stdexcept>
 #include <vector>
 #include <getopt.h>
+#include <libgen.h>
+#include <unistd.h>
 
 #include "atlas.h"
 #include "compat.h"
@@ -1208,6 +1211,7 @@ void print_usage(const char *prog)
     "  Options:\n"
     "    -f, --format <format>        See \"Format Options\"\n"
     "    -h, --help                   Show this help message\n"
+    "    -i, --include <file>         Include options from file\n"
     "    -m, --mipmap <filter>        Generate mipmaps. See \"Mipmap Filter Options\"\n"
     "    -o, --output <output>        Output file\n"
     "    -p, --preview <preview>      Output preview file\n"
@@ -1346,12 +1350,79 @@ enum ParseStatus
 const char *prog;
 std::vector<std::string> input_files;
 
-ParseStatus parseOptions(int argc, char *argv[])
+std::string getPath(const std::string &cwd, const std::string &path)
+{
+  if(path[0] == '/')
+    return path;
+
+  return cwd + '/' + path;
+}
+
+std::vector<std::string> readOptions(const std::string &path)
+{
+  FILE *fp = std::fopen(path.c_str(), "r");
+  if(!fp)
+    throw std::runtime_error("Failed to open options file");
+
+  try
+  {
+    std::vector<std::string> options(1);
+    int c;
+    bool quoted = false;
+    std::string opt;
+
+    while((c = std::fgetc(fp)) != EOF)
+    {
+      switch(c)
+      {
+        case '"':
+          quoted = !quoted;
+          break;
+
+        case '\\':
+          if(quoted)
+            c = std::fgetc(fp);
+          if(c == EOF)
+            throw std::runtime_error("Reached end of options file at partially escaped character");
+
+        /* fall-through */
+        default:
+          if(quoted)
+            opt.push_back(c);
+          else if(std::isspace(c))
+          {
+            if(!opt.empty())
+              options.push_back(opt);
+            opt.clear();
+          }
+          else
+            opt.push_back(c);
+          break;
+      }
+    }
+
+    if(quoted)
+      throw std::runtime_error("Reached end of options file at partially quoted string");
+
+    if(!opt.empty())
+      options.push_back(opt);
+
+    return options;
+  }
+  catch(...)
+  {
+    std::fclose(fp);
+    throw;
+  }
+}
+
+ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
 {
   int c;
 
   // parse options
-  while((c = ::getopt_long(argc, argv, "f:hm:o:p:q:rs:vz:", long_options, nullptr)) != -1)
+  while((c = ::getopt_long(args.size(), args.data(),
+                           "f:hi:m:o:p:q:rs:vz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
@@ -1390,6 +1461,44 @@ ParseStatus parseOptions(int argc, char *argv[])
         print_usage(prog);
         return PARSE_EXIT;
 
+      case 'i':
+      try
+      {
+        std::string optionsFile = getPath(cwd, optarg);
+        std::string new_cwd;
+        {
+          std::vector<char> path(optionsFile.begin(), optionsFile.end());
+          path.push_back(0);
+          new_cwd = ::dirname(path.data());
+        }
+
+        int old_optind = optind;
+        optind = 1;
+
+        std::vector<std::string> options = readOptions(optionsFile);
+
+        std::vector<char*> o;
+        for(std::vector<std::string>::iterator it = options.begin();
+            it != options.end(); ++it)
+        {
+          // getopt only take non-const :(
+          o.push_back(const_cast<char*>(it->c_str()));
+        }
+
+        ParseStatus status = parseOptions(new_cwd, o);
+
+        optind = old_optind;
+
+        if(status != PARSE_SUCCESS)
+          return status;
+      }
+      catch(const std::exception &e)
+      {
+        std::fprintf(stderr, "%s\n", e.what());
+        return PARSE_FAILURE;
+      }
+      break;
+
       case 'm':
       {
         // find matching mipmap filter type
@@ -1412,12 +1521,12 @@ ParseStatus parseOptions(int argc, char *argv[])
 
       case 'o':
         // set output path option
-        output_path = optarg;
+        output_path = getPath(cwd, optarg);
         break;
 
       case 'p':
         // set preview path option
-        preview_path = optarg;
+        preview_path = getPath(cwd, optarg);
         break;
 
       case 'q':
@@ -1480,8 +1589,9 @@ ParseStatus parseOptions(int argc, char *argv[])
     }
   }
 
-  while(optind < argc)
-    input_files.push_back(argv[optind++]);
+  assert(optind >= 0);
+  while(static_cast<size_t>(optind) < args.size())
+    input_files.push_back(getPath(cwd, args[optind++]));
 
   return PARSE_SUCCESS;
 }
@@ -1496,13 +1606,29 @@ ParseStatus parseOptions(int argc, char *argv[])
  */
 int main(int argc, char *argv[])
 {
+  std::string cwd;
   prog = argv[0];
 
   setlinebuf(stdout);
   setlinebuf(stderr);
 
+  {
+    std::vector<char> cwd_tmp(PATH_MAX);
+    char *c = ::getcwd(cwd_tmp.data(), cwd_tmp.size());
+    if(!c)
+    {
+      std::fprintf(stderr, "Failed to get current working directory: %s\n",
+                   std::strerror(errno));
+      return EXIT_FAILURE;
+    }
+
+    cwd = std::string(cwd_tmp.data());
+  }
+
+  std::vector<char*> args(argv, argv+argc);
+
   // parse options
-  switch(parseOptions(argc, argv))
+  switch(parseOptions(cwd, args))
   {
     case PARSE_SUCCESS:
       break;
@@ -1557,7 +1683,7 @@ int main(int argc, char *argv[])
   }
   catch(const std::exception &e)
   {
-    std::fprintf(stderr, "%s: %s\n", argv[optind], e.what());
+    std::fprintf(stderr, "%s\n", e.what());
     return EXIT_FAILURE;
   }
   catch(...)
