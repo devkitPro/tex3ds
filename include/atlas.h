@@ -31,5 +31,13 @@ struct Atlas
   Magick::Image         img;
   std::vector<SubImage> subs;
 
+  Atlas()
+  { }
+
+  Atlas(const Atlas &other) = delete;
+  Atlas(Atlas &&other) = default;
+  Atlas& operator=(const Atlas &other) = delete;
+  Atlas& operator=(Atlas &&other) = delete;
+
   static Atlas build(const std::vector<std::string> &paths);
 };

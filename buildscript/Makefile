@@ -8,16 +8,16 @@ libbzip2_PATH         := bzip2-1.0.6
 libbzip2_CONFIGURE    := /bin/true
 libbzip2_MAKE         := PREFIX="$(COMMON_PREFIX)"
 
-libjpeg_PKG           := libjpeg-turbo-1.5.1.tar.gz
-libjpeg_PATH          := libjpeg-turbo-1.5.1
+libjpeg_PKG           := libjpeg-turbo-1.5.2.tar.gz
+libjpeg_PATH          := libjpeg-turbo-1.5.2
 libjpeg_CONFIGURE     := $(COMMON_CONFIGURE)
 
-libtiff_PKG           := tiff-4.0.7.tar.gz
-libtiff_PATH          := tiff-4.0.7
+libtiff_PKG           := tiff-4.0.8.tar.gz
+libtiff_PATH          := tiff-4.0.8
 libtiff_CONFIGURE     := $(COMMON_CONFIGURE)
 
-libpng_PKG            := libpng-1.6.28.tar.xz
-libpng_PATH           := libpng-1.6.28
+libpng_PKG            := libpng-1.6.34.tar.xz
+libpng_PATH           := libpng-1.6.34
 libpng_CONFIGURE      := $(COMMON_CONFIGURE)
 
 zlib_PKG              := zlib-1.2.11.tar.xz
@@ -25,8 +25,8 @@ zlib_PATH             := zlib-1.2.11
 zlib_CONFIGURE        := ./configure --static --prefix=$(COMMON_PREFIX)
 
 ImageMagick_PKG       := ImageMagick.tar.gz
-ImageMagick_PATH      := ImageMagick-7.0.4-9
-ImageMagick_CONFIGURE := $(COMMON_CONFIGURE) --disable-openmp --with-gslib=no --without-freetype --without-lcms --without-openexr --without-webp --without-x 
+ImageMagick_PATH      := ImageMagick-7.0.7-4
+ImageMagick_CONFIGURE := $(COMMON_CONFIGURE) --disable-openmp --with-gslib=no --without-fontconfig --without-freetype --without-lcms --without-openexr --without-pango --without-webp --without-x --without-xml
 
 export LD_LIBRARY_PATH := "$(COMMON_PREFIX)/lib"
 export PKG_CONFIG_PATH := "$(LD_LIBRARY_PATH)/pkgconfig"
@@ -39,7 +39,7 @@ all:
 tex3ds: ImageMagick
 	@cd .. && \
 		./autogen.sh && \
-		./configure PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" PKG_CONFIG="pkg-config --static" && \
+		./configure PKG_CONFIG_PATH="$(PKG_CONFIG_PATH)" PKG_CONFIG="pkg-config --static" --prefix=$(DEVKITARM) && \
 		$(MAKE) LDFLAGS="-static -pthread" && \
 		strip $@
 

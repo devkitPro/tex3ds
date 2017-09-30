@@ -8,12 +8,12 @@
 namespace
 {
 
-inline size_t calcPOT(size_t x)
+inline size_t calcPOT(double x)
 {
   if(x < 8)
     return 8;
 
-  return std::pow(2.0, std::ceil(std::log(static_cast<double>(x)) / std::log(2.0)));
+  return std::pow(2.0, std::ceil(std::log2(x)));
 }
 
 typedef std::pair<size_t,size_t> XY;
@@ -24,6 +24,12 @@ struct Block
   Magick::Image img;
   XY            xy;
   size_t        x, y, w, h;
+
+  Block() = delete;
+  Block(const Block &other) = default;
+  Block(Block &&other) = default;
+  Block& operator=(const Block &other) = delete;
+  Block& operator=(Block &&other) = delete;
 
   Block(size_t index, const Magick::Image &img, size_t x, size_t y, size_t w, size_t h)
   : index(index), img(img), x(x), y(y), w(w), h(h)
@@ -70,21 +76,29 @@ struct Packer
 
   size_t width, height;
 
+  Packer() = delete;
+  Packer(const Packer &other) = delete;
+  Packer(Packer &&other) = default;
+  Packer& operator=(const Packer &other) = delete;
+  Packer& operator=(Packer &&other) = default;
+
   Packer(const std::vector<Magick::Image> &images, size_t width, size_t height);
 
   Magick::Image composite() const
   {
     Magick::Image img(Magick::Geometry(width, height), transparent());
 
-    for(auto &it: placed)
+    for(const auto &block: placed)
     {
-      if(it.img.columns() == it.w && it.img.rows() == it.h)
-        img.composite(it.img, Magick::Geometry(0, 0, it.x, it.y), Magick::OverCompositeOp);
+      if(block.img.columns() == block.w && block.img.rows() == block.h)
+        img.composite(block.img, Magick::Geometry(0, 0, block.x, block.y),
+                      Magick::OverCompositeOp);
       else
       {
-        Magick::Image copy = it.img;
+        Magick::Image copy = block.img;
         copy.rotate(-90);
-        img.composite(copy, Magick::Geometry(0, 0, it.x, it.y), Magick::OverCompositeOp);
+        img.composite(copy, Magick::Geometry(0, 0, block.x, block.y),
+                      Magick::OverCompositeOp);
       }
     }
 
@@ -102,10 +116,10 @@ struct Packer
 
   bool intersects_placed(size_t x, size_t y) const
   {
-    for(const auto &it: placed)
+    for(const auto &block: placed)
     {
-      if(x >= it.x && x < it.x + it.w
-      && y >= it.y && y < it.y + it.h)
+      if(x >= block.x && x < block.x + block.w
+      && y >= block.y && y < block.y + block.h)
         return true;
     }
 
@@ -130,9 +144,8 @@ struct Packer
 
   void fixup()
   {
-    std::set<XY>::iterator it = free.begin();
-
-    while(it != free.end())
+    auto it = std::begin(free);
+    while(it != std::end(free))
     {
       if(intersects_placed(*it))
         it = free.erase(it);
@@ -145,11 +158,8 @@ struct Packer
 Packer::Packer(const std::vector<Magick::Image> &images, size_t width, size_t height)
 : placed(), next(), free(), width(width), height(height)
 {
-  for(std::vector<Magick::Image>::const_iterator it = images.begin();
-      it != images.end(); ++it)
-  {
-    next.push_back(Block(std::stoul(it->attribute("index")), *it));
-  }
+  for(const auto &img: images)
+    next.push_back(Block(std::stoul(img.attribute("index")), img));
 
   free.insert(XY(0, 0));
 }
@@ -161,15 +171,15 @@ bool Packer::solve()
     Block block = next.back();
     next.pop_back();
 
-    std::set<XY>::iterator best         = free.end();
-    size_t                 best_score   = 0;
-    bool                   best_flipped = false;
-    for(std::set<XY>::iterator it = free.begin(); it != free.end(); ++it)
+    XY         best;
+    size_t     best_score   = 0;
+    bool       best_flipped = false;
+    for(const auto &it: free)
     {
-      block.x = it->first;
-      block.y = it->second;
+      block.x = it.first;
+      block.y = it.second;
 
-      size_t score = calc_score(it->first, it->second, block.w, block.h);
+      size_t score = calc_score(it.first, it.second, block.w, block.h);
       if(score > best_score)
       {
         best         = it;
@@ -179,7 +189,7 @@ bool Packer::solve()
 
       if(block.w != block.h)
       {
-        size_t score = calc_score(it->first, it->second, block.h, block.w);
+        size_t score = calc_score(it.first, it.second, block.h, block.w);
         if(score > best_score)
         {
           best         = it;
@@ -192,8 +202,8 @@ bool Packer::solve()
     if(best_score == 0)
       return false;
 
-    block.x = best->first;
-    block.y = best->second;
+    block.x = best.first;
+    block.y = best.second;
     if(best_flipped)
       std::swap(block.w, block.h);
 
@@ -250,31 +260,31 @@ size_t Packer::calc_score(size_t x, size_t y, size_t w, size_t h)
   if(y + h > height)
     return 0;
 
-  for(std::set<Block>::iterator it = placed.begin(); it != placed.end(); ++it)
+  for(const auto &block: placed)
   {
-    if(x+w < it->x)
+    if(x+w < block.x)
       break;
 
-    if(x < it->x + it->w
-    && x + w > it->x
-    && y < it->y + it->h
-    && y + h > it->y)
+    if(x < block.x + block.w
+    && x + w > block.x
+    && y < block.y + block.h
+    && y + h > block.y)
       return 0;
 
-    if(x == it->x + it->w
-    || x + w == it->x)
+    if(x == block.x + block.w
+    || x + w == block.x)
     {
-      size_t start = std::max(y, it->y);
-      size_t end   = std::min(y + h, it->y + it->h);
+      size_t start = std::max(y, block.y);
+      size_t end   = std::min(y + h, block.y + block.h);
       if(end > start)
         score += end - start;
     }
 
-    if(y == it->y + it->h
-    || y + h == it->y)
+    if(y == block.y + block.h
+    || y + h == block.y)
     {
-      size_t start = std::max(x, it->x);
-      size_t end   = std::min(x + w, it->x + it->w);
+      size_t start = std::max(x, block.x);
+      size_t end   = std::min(x + w, block.x + block.w);
       if(end > start)
         score += end - start;
     }
@@ -326,18 +336,19 @@ Atlas Atlas::build(const std::vector<std::string> &paths)
 {
   std::vector<Magick::Image> images;
 
-  for(size_t i = 0; i < paths.size(); ++i)
+  size_t i = 0;
+  for(const auto &path: paths)
   {
-    Magick::Image img(paths[i]);
-    img.attribute("index", std::to_string(i));
+    Magick::Image img(path);
+    img.attribute("index", std::to_string(i++));
     images.push_back(img);
   }
 
-  std::sort(images.begin(), images.end(), AreaSizeComparator());
+  std::sort(std::begin(images), std::end(images), AreaSizeComparator());
 
   size_t totalArea = 0;
-  for(std::vector<Magick::Image>::iterator it = images.begin(); it != images.end(); ++it)
-    totalArea += it->rows() * it->columns();
+  for(const auto &img: images)
+    totalArea += img.rows() * img.columns();
 
   std::vector<Packer> packers;
   for(size_t h = calcPOT(std::min(images.back().columns(), images.back().rows())); h <= 1024; h *= 2)
@@ -349,19 +360,19 @@ Atlas Atlas::build(const std::vector<std::string> &paths)
     }
   }
 
-  std::sort(packers.begin(), packers.end(), AreaSizeComparator());
+  std::sort(std::begin(packers), std::end(packers), AreaSizeComparator());
 
-  for(size_t i = 0; i < packers.size(); ++i)
+  for(auto &packer: packers)
   {
-    if(packers[i].solve())
+    if(packer.solve())
     {
       Atlas atlas;
 
-      atlas.img = packers[i].composite();
-      for(auto &it: packers[i].placed)
-        atlas.subs.push_back(it.subImage(atlas.img));
+      atlas.img = packer.composite();
+      for(auto &block: packer.placed)
+        atlas.subs.push_back(block.subImage(atlas.img));
 
-      std::sort(atlas.subs.begin(), atlas.subs.end());
+      std::sort(std::begin(atlas.subs), std::end(atlas.subs));
       return atlas;
     }
   }

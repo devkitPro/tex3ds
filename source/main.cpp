@@ -23,32 +23,25 @@
 #include <algorithm>
 #include <cassert>
 #include <climits>
+#include <condition_variable>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <queue>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 #include <getopt.h>
 #include <libgen.h>
 #include <unistd.h>
 
 #include "atlas.h"
-#include "compat.h"
 #include "compress.h"
 #include "encode.h"
 #include "magick_compat.h"
 #include "quantum.h"
 #include "rg_etc1.h"
 #include "subimage.h"
-#include "tex3ds.h"
-#include "thread.h"
-
-/** @brief Get number of elements in an array
- *  @param[in] x Array to count
- *  @returns Number of elements in array
- */
-#define ARRAY_COUNT(x) (sizeof(x)/sizeof(x[0]))
 
 namespace
 {
@@ -62,8 +55,19 @@ inline size_t potCeil(size_t x)
   if(x < 8)
     return 8;
 
-  return std::pow(2.0, std::ceil(std::log(x)/std::log(2)));
+  return std::pow(2.0, std::ceil(std::log2(x)));
 }
+
+/** @brief Case-insensitive string comparator */
+template<typename T>
+struct CaseInsensitiveComparator
+{
+  bool operator()(const std::pair<const char*, T> &lhs,
+                  const char *rhs) const
+  {
+    return strcasecmp(lhs.first, rhs) < 0;
+  }
+};
 
 /** @brief Process format */
 enum ProcessFormat
@@ -87,24 +91,11 @@ enum ProcessFormat
   AUTO_ETC1,       ///< ETC1/ETC1A4 encoding
 };
 
-/** @brief Process format string map */
-struct ProcessFormatString
-{
-  const char    *str; ///< string
-  ProcessFormat fmt;  ///< format
-
-  /** @brief Comparator
-   *  @param[in] str String to compare
-   */
-  bool operator<(const char *str) const
-  {
-    // case-insensitive comparison
-    return strcasecmp(this->str, str) < 0;
-  }
-};
+typedef std::pair<const char*, ProcessFormat> ProcessFormatMap;
+typedef CaseInsensitiveComparator<ProcessFormat> ProcessFormatComparator;
 
 /** @brief Process format strings */
-ProcessFormatString output_format_strings[] =
+const ProcessFormatMap output_format_strings[] =
 {
   { "a",         A8,        },
   { "a4",        A4,        },
@@ -137,10 +128,6 @@ ProcessFormatString output_format_strings[] =
   { "rgba8888",  RGBA8888,  },
 };
 
-/** @brief End of output_format_strings */
-ProcessFormatString *output_format_strings_end =
-  output_format_strings + ARRAY_COUNT(output_format_strings);
-
 /** @brief Compression format */
 enum CompressionFormat
 {
@@ -152,24 +139,11 @@ enum CompressionFormat
   COMPRESSION_AUTO, ///< Choose best compression
 };
 
-/** @brief Compression format string map */
-struct CompressionFormatString
-{
-  const char        *str; ///< string
-  CompressionFormat fmt;  ///< format
-
-  /** @brief Comparator
-   *  @param[in] str String to compare
-   */
-  bool operator<(const char *str) const
-  {
-    // case-insensitive comparison
-    return strcasecmp(this->str, str) < 0;
-  }
-};
+typedef std::pair<const char*, CompressionFormat> CompressionFormatMap;
+typedef CaseInsensitiveComparator<CompressionFormat> CompressionFormatComparator;
 
 /** @brief Compression format strings */
-CompressionFormatString compression_format_strings[] =
+const CompressionFormatMap compression_format_strings[] =
 {
   { "auto",     COMPRESSION_AUTO, },
   { "huff",     COMPRESSION_HUFF, },
@@ -181,28 +155,11 @@ CompressionFormatString compression_format_strings[] =
   { "rle",      COMPRESSION_RLE,  },
 };
 
-/** @brief End of compression_format_strings */
-CompressionFormatString *compression_format_strings_end =
-  compression_format_strings + ARRAY_COUNT(compression_format_strings);
-
-/** @brief Filter type string format */
-struct FilterTypeString
-{
-  const char *str; ///< string
-  FilterType type; ///< filter type
-
-  /** @brief Comparator
-   *  @param[in] str String to compare
-   */
-  bool operator<(const char *str) const
-  {
-    // case-insensitive comparison
-    return strcasecmp(this->str, str) < 0;
-  }
-};
+typedef std::pair<const char*, FilterType> FilterTypeMap;
+typedef CaseInsensitiveComparator<FilterType> FilterTypeComparator;
 
 /** @brief Filter type strings */
-FilterTypeString filter_type_strings[] =
+const FilterTypeMap filter_type_strings[] =
 {
   { "bartlett",       Magick::BartlettFilter,      },
   { "bessel",         Magick::BesselFilter,        },
@@ -235,10 +192,6 @@ FilterTypeString filter_type_strings[] =
   { "triangle",       Magick::TriangleFilter,      },
   { "welsh",          Magick::WelshFilter,         },
 };
-
-/** @brief End of filter_type_strings */
-FilterTypeString *filter_type_strings_end =
-  filter_type_strings + ARRAY_COUNT(filter_type_strings);
 
 /** @brief Processing mode */
 enum ProcessingMode
@@ -489,25 +442,25 @@ void swizzle(PixelPacket p, bool reverse)
   if(!reverse)
   {
     // swizzle each foursome
-    for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
+    for(const auto &entry: table)
     {
-      Magick::Color tmp = p[table[i][0]];
-      p[table[i][0]]    = p[table[i][1]];
-      p[table[i][1]]    = p[table[i][2]];
-      p[table[i][2]]    = p[table[i][3]];
-      p[table[i][3]]    = tmp;
+      Magick::Color tmp = p[entry[0]];
+      p[entry[0]]       = p[entry[1]];
+      p[entry[1]]       = p[entry[2]];
+      p[entry[2]]       = p[entry[3]];
+      p[entry[3]]       = tmp;
     }
   }
   else
   {
     // unswizzle each foursome
-    for(size_t i = 0; i < ARRAY_COUNT(table); ++i)
+    for(const auto &entry: table)
     {
-      Magick::Color tmp = p[table[i][3]];
-      p[table[i][3]] = p[table[i][2]];
-      p[table[i][2]] = p[table[i][1]];
-      p[table[i][1]] = p[table[i][0]];
-      p[table[i][0]] = tmp;
+      Magick::Color tmp = p[entry[3]];
+      p[entry[3]]       = p[entry[2]];
+      p[entry[2]]       = p[entry[1]];
+      p[entry[1]]       = p[entry[0]];
+      p[entry[0]]       = tmp;
     }
   }
 
@@ -587,40 +540,16 @@ std::string add_prefix(std::string path, std::string prefix)
  */
 void finalize_process_format(std::vector<Magick::Image> &images)
 {
-  std::vector<Magick::Image>::iterator it = images.begin();
-
   // check each sub-image for transparency
-  while(it != images.end())
-  {
-    if(process_format == AUTO_L8)
-    {
-      if(has_alpha<8>(*it))
-      {
-        process_format = LA88;
-        break;
-      }
-    }
-    else if(process_format == AUTO_L4)
-    {
-      if(has_alpha<4>(*it))
-      {
-        process_format = LA44;
-        break;
-      }
-    }
-    else if(process_format == AUTO_ETC1)
-    {
-      if(has_alpha<4>(*it))
-      {
-        process_format = ETC1A4;
-        break;
-      }
-    }
-    else
-      break;
-
-    ++it;
-  }
+  if(process_format == AUTO_L8
+  && std::any_of(std::begin(images), std::end(images), has_alpha<8>))
+    process_format = LA88;
+  else if(process_format == AUTO_L4
+  && std::any_of(std::begin(images), std::end(images), has_alpha<4>))
+    process_format = LA44;
+  else if(process_format == AUTO_ETC1
+  && std::any_of(std::begin(images), std::end(images), has_alpha<4>))
+    process_format = ETC1A4;
 
   // check if no transparency was found
   if(process_format == AUTO_L8)
@@ -655,7 +584,7 @@ bool work_done = false;
 /** @brief Work thread
  *  @param[in] param Unused
  */
-THREAD_RETURN_T work_thread(void *param)
+void work_thread(void *param)
 {
   std::unique_lock<std::mutex> mutex(work_mutex);
   while(true)
@@ -666,10 +595,10 @@ THREAD_RETURN_T work_thread(void *param)
 
     // if there's no more work, quit
     if(work_done && work_queue.empty())
-      THREAD_EXIT;
+      return;
 
     // get a work unit
-    encode::WorkUnit work = work_queue.front();
+    encode::WorkUnit work = std::move(work_queue.front());
     work_queue.pop();
     mutex.unlock();
 
@@ -678,7 +607,7 @@ THREAD_RETURN_T work_thread(void *param)
 
     // put result on the result queue
     result_mutex.lock();
-    result_queue.push_back(work);
+    result_queue.push_back(std::move(work));
     std::push_heap(result_queue.begin(), result_queue.end());
     result_cond.notify_one();
     result_mutex.unlock();
@@ -856,7 +785,7 @@ void process_image(Magick::Image &img)
 
         // queue the work unit
         work_mutex.lock();
-        work_queue.push(work);
+        work_queue.push(std::move(work));
         work_cond.notify_one();
         work_mutex.unlock();
       }
@@ -1009,10 +938,9 @@ void write_tex3ds_header(FILE *fp)
   encode::encode<uint8_t>(num_mipmaps, buf);
 
   // encode subimage info
-  for(size_t i = 0; i < subimage_data.size(); ++i)
+  //for(size_t i = 0; i < subimage_data.size(); ++i)
+  for(const auto &sub: subimage_data)
   {
-    const SubImage &sub = subimage_data[i];
-
     uint16_t width;
     uint16_t height;
 
@@ -1042,15 +970,18 @@ void write_tex3ds_header(FILE *fp)
  */
 void* compress_none(const void *src, size_t len, size_t *outlen)
 {
-  // pad to 4 bytes
-  size_t padded_len = ((len+COMPRESSION_HEADER_SIZE) + 3) & ~3;
+  uint8_t header[COMPRESSION_HEADER_SIZE];
+  size_t header_size = compression_header(header, 0x00, len);
 
-  uint8_t *output = static_cast<uint8_t*>(std::malloc(padded_len));
+  // pad to 4 bytes
+  size_t padded_len = ((len+header_size) + 3) & ~3;
+
+  uint8_t *output = static_cast<uint8_t*>(std::calloc(1, padded_len));
   if(!output)
     return nullptr;
 
-  compression_header(output, 0x00, len);
-  std::memcpy(output+COMPRESSION_HEADER_SIZE, src, len);
+  std::memcpy(output, header, header_size);
+  std::memcpy(output+header_size, src, len);
   *outlen = padded_len;
 
   return output;
@@ -1067,7 +998,7 @@ void* compress_auto(const void *src, size_t len, size_t *outlen)
   void   *best_output = nullptr;
   size_t best_outlen = SIZE_MAX;
 
-  static void* (* const compress[])(const void*,size_t,size_t*) =
+  static void* (* const compress_funcs[])(const void*,size_t,size_t*) =
   {
     compress_none,
     lzss_encode,
@@ -1076,10 +1007,10 @@ void* compress_auto(const void *src, size_t len, size_t *outlen)
     rle_encode,
   };
 
-  for(size_t i = 0; i < ARRAY_COUNT(compress); ++i)
+  for(const auto &compress: compress_funcs)
   {
     size_t outlen;
-    void   *output = compress[i](src, len, &outlen);
+    void   *output = compress(src, len, &outlen);
 
     if(output && outlen < best_outlen)
     {
@@ -1189,10 +1120,11 @@ void sanitize_identifier(std::string &id)
   if(!std::isalnum(id[0]) && id[0] != '_')
     id.insert(0, 1, '_');
 
-  for(size_t i = 0; i < id.size(); ++i)
+  //for(size_t i = 0; i < id.size(); ++i)
+  for(auto &c: id)
   {
-    if(!std::isalnum(id[i]) && id[i] != '_')
-      id[i] = '_';
+    if(!std::isalnum(c) && c != '_')
+      c = '_';
   }
 }
 
@@ -1217,15 +1149,16 @@ void write_header()
     header_path = ::basename(path.data());
   }
 
-  std::string::size_type pos = header_path.rfind('.');
+  auto pos = header_path.rfind('.');
   if(pos != std::string::npos)
     header_path.resize(pos);
 
   sanitize_identifier(header_path);
 
-  for(size_t i = 0; i < subimage_data.size(); ++i)
+  size_t i = 0;
+  for(const auto &sub: subimage_data)
   {
-    std::string label = subimage_data[i].name;
+    std::string label = sub.name;
 
     pos = label.rfind('.');
     if(pos != std::string::npos)
@@ -1239,7 +1172,7 @@ void write_header()
       label.insert(0, 1, '_');
 
     std::fprintf(fp, "#define %s%s %zu\n",
-                 header_path.c_str(), label.c_str(), i);
+                 header_path.c_str(), label.c_str(), i++);
   }
 
   // close output header
@@ -1346,8 +1279,8 @@ void print_usage(const char *prog)
     "      ETC1 when input has no alpha, otherwise ETC1A4\n\n"
 
     "  Mipmap Filter Options:\n");
-    for(size_t i = 0; i < ARRAY_COUNT(filter_type_strings); ++i)
-      std::printf("    -m %s\n", filter_type_strings[i].str);
+    for(const auto &type: filter_type_strings)
+      std::printf("    -m %s\n", type.first);
 
     std::printf("\n"
     "  Compression Options:\n"
@@ -1507,14 +1440,14 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
       case 'f':
       {
         // find matching output format
-        ProcessFormatString *it =
-          std::lower_bound(output_format_strings,
-                           output_format_strings_end,
-                           optarg);
+        auto format = std::lower_bound(std::begin(output_format_strings),
+                                       std::end(output_format_strings),
+                                       optarg,
+                                       ProcessFormatComparator());
 
         // set output format option
-        if(it != output_format_strings_end && strcasecmp(it->str, optarg) == 0)
-          process_format = it->fmt;
+        if(format != std::end(output_format_strings))
+          process_format = format->second;
         else
         {
           std::fprintf(stderr, "Invalid format option '%s'\n", optarg);
@@ -1550,11 +1483,10 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
         std::vector<std::string> options = readOptions(optionsFile);
 
         std::vector<char*> o;
-        for(std::vector<std::string>::iterator it = options.begin();
-            it != options.end(); ++it)
+        for(const auto &opt: options)
         {
           // getopt only take non-const :(
-          o.push_back(const_cast<char*>(it->c_str()));
+          o.push_back(const_cast<char*>(opt.c_str()));
         }
 
         ParseStatus status = parseOptions(new_cwd, o);
@@ -1574,14 +1506,14 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
       case 'm':
       {
         // find matching mipmap filter type
-        FilterTypeString *it =
-          std::lower_bound(filter_type_strings,
-                           filter_type_strings_end,
-                           optarg);
+        auto filter = std::lower_bound(std::begin(filter_type_strings),
+                                       std::end(filter_type_strings),
+                                       optarg,
+                                       FilterTypeComparator());
 
         // set mipmap filter type option
-        if(it != filter_type_strings_end && strcasecmp(it->str, optarg) == 0)
-          filter_type = it->type;
+        if(filter != std::end(filter_type_strings))
+          filter_type = filter->second;
         else
         {
           std::fprintf(stderr, "Invalid mipmap filter type '%s'\n", optarg);
@@ -1635,17 +1567,14 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
       case 'z':
       {
         // find matching compression format
-        CompressionFormatString *it =
-          std::lower_bound(compression_format_strings,
-                           compression_format_strings_end,
-                           optarg);
+        auto format = std::lower_bound(std::begin(compression_format_strings),
+                                       std::end(compression_format_strings),
+                                       optarg,
+                                       CompressionFormatComparator());
 
         // set compression format option
-        if(it != compression_format_strings_end
-        && strcasecmp(it->str, optarg) == 0)
-        {
-          compression_format = it->fmt;
-        }
+        if(format != std::end(compression_format_strings))
+          compression_format = format->second;
         else
         {
           std::fprintf(stderr, "Invalid compression option '%s'\n", optarg);
@@ -1728,7 +1657,7 @@ int main(int argc, char *argv[])
     std::vector<Magick::Image> images;
     if(process_mode == PROCESS_ATLAS)
     {
-      Atlas atlas = Atlas::build(input_files);
+      Atlas atlas(Atlas::build(input_files));
       subimage_data.swap(atlas.subs);
       images = load_image(atlas.img);
     }

@@ -32,11 +32,6 @@ PixelPacket::Reference::Reference(const Pixels *cache, Magick::Quantum *pixel)
   pixel(pixel)
 { }
 
-PixelPacket::Reference::Reference(const PixelPacket::Reference &other)
-: cache(other.cache),
-  pixel(other.pixel)
-{ }
-
 PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Reference &other)
 {
   if(&other != this)
@@ -59,7 +54,6 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Ref
   return *this;
 }
 
-#if __cplusplus >= 201103L
 PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference &&other)
 {
   // copy pixel data
@@ -78,7 +72,6 @@ PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference
 
   return *this;
 }
-#endif
 
 PixelPacket::Reference& PixelPacket::Reference::operator=(const Magick::Color &c)
 {
@@ -116,6 +109,11 @@ PixelPacket::PixelPacket(const PixelPacket &other)
   pixels(other.pixels)
 { }
 
+PixelPacket::PixelPacket(PixelPacket &&other)
+: cache(other.cache),
+  pixels(other.pixels)
+{ }
+
 PixelPacket& PixelPacket::operator=(const PixelPacket &other)
 {
   if(&other != this)
@@ -127,13 +125,6 @@ PixelPacket& PixelPacket::operator=(const PixelPacket &other)
   return *this;
 }
 
-#if __cplusplus >= 201103L
-PixelPacket::PixelPacket(PixelPacket &&other)
-: cache(other.cache),
-  pixels(other.pixels)
-{
-}
-
 PixelPacket& PixelPacket::operator=(PixelPacket &&other)
 {
   cache  = other.cache;
@@ -141,7 +132,6 @@ PixelPacket& PixelPacket::operator=(PixelPacket &&other)
 
   return *this;
 }
-#endif
 
 PixelPacket::Reference PixelPacket::operator[](size_t index) const
 {

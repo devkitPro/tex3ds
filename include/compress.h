@@ -25,7 +25,6 @@
 /** @brief Compression header size */
 #define COMPRESSION_HEADER_SIZE 8
 
-#include "compat.h"
 #ifdef __cplusplus
 #include <cassert>
 extern "C"

@@ -21,7 +21,7 @@ AX_CHECK_COMPILE_FLAG([-Wall],      [CPPFLAGS+=" -Wall"])
 AX_CHECK_COMPILE_FLAG([-pthread],   [CPPFLAGS+=" -pthread" LDFLAGS+=" -pthread"])
 AX_CHECK_COMPILE_FLAG([-flto],      [CPPFLAGS+=" -flto" LDFLAGS+=" -flto"])
 AX_CHECK_COMPILE_FLAG([-pipe],      [CPPFLAGS+=" -pipe"])
-AX_CHECK_COMPILE_FLAG([-std=c++11], [CXXFLAGS+=" -std=c++11"])
+AX_CXX_COMPILE_STDCXX_11(noext, mandatory)
 AC_LANG_POP()
 
 AC_CHECK_PROGS([DOXYGEN], [doxygen])

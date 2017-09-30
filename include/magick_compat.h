@@ -33,7 +33,6 @@
  *  - Magick::PixelPacket removed
  */
 #pragma once
-#include "compat.h"
 #include <algorithm>
 #include <Magick++.h>
 
@@ -138,7 +137,7 @@ public:
     Magick::Quantum *pixel; ///< Pixel referenced
 
     /** @brief Default constructor */
-    Reference() DELETE_CONSTRUCTOR;
+    Reference() = delete;
 
     /** @brief Constructor
      *  @param[in] cache Pixel cache
@@ -152,15 +151,8 @@ public:
     /** @brief Copy constructor
      *  @param[in] other Reference to copy
      */
-    Reference(const Reference &other);
+    Reference(const Reference &other) = default;
 
-    /** @brief Assignment operator
-     *  @param[in] other Reference to assign
-     *  @returns reference to self
-     */
-    Reference& operator=(const Reference &other);
-
-#if __cplusplus >= 201103L
     /** @brief Copy constructor
      *  @param[in] other Reference to copy
      */
@@ -170,8 +162,13 @@ public:
      *  @param[in] other Reference to assign
      *  @returns reference to self
      */
+    Reference& operator=(const Reference &other);
+
+    /** @brief Assignment operator
+     *  @param[in] other Reference to assign
+     *  @returns reference to self
+     */
     Reference& operator=(Reference &&other);
-#endif
 
     /** @brief Assignment operator
      *  @param[in] c Color to assign
@@ -202,7 +199,6 @@ public:
    */
   PixelPacket& operator=(const PixelPacket &other);
 
-#if __cplusplus >= 201103L
   /** @brief Copy constructor
    *  @param[in] other PixelPacket to copy
    */
@@ -213,7 +209,6 @@ public:
    *  @returns reference to self
    */
   PixelPacket& operator=(PixelPacket &&other);
-#endif
 
   /** @brief Index operator
    *  @param[in] index Pixel index

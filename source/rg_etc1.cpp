@@ -14,13 +14,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <cstring>
-
-#if __cplusplus >= 201103L
 #include <cstdint>
-#else
-#include <stdint.h>
-#endif
+#include <cstring>
 
 #if defined(_WIN32) || defined(WIN32)
 #pragma warning (disable: 4201) //  nonstandard extension used : nameless struct/union

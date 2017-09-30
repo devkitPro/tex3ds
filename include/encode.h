@@ -24,10 +24,10 @@
  *  for ETC1/ETC1A4 which do not involve swizzling.
  */
 #pragma once
-#include "compat.h"
 #include "magick_compat.h"
 #include "rg_etc1.h"
 #include "subimage.h"
+#include <cassert>
 #include <vector>
 
 /** @namespace encode
@@ -88,7 +88,12 @@ encode<uint32_t>(const uint32_t &in, Buffer &out)
 template<> inline void
 encode<float>(const float &in, Buffer &out)
 {
-  encode<uint16_t>(in * 1024, out);
+  constexpr uint16_t scale = 1024;
+
+  assert(in >= 0);
+  assert(in <= std::numeric_limits<uint16_t>::max() / scale);
+
+  encode<uint16_t>(in * scale, out);
 }
 
 /** @brief Encode sub-image
@@ -146,6 +151,12 @@ struct WorkUnit
     preview(preview),
     process(process)
   { }
+
+  WorkUnit() = delete;
+  WorkUnit(const WorkUnit &other) = delete;
+  WorkUnit(WorkUnit &&other) = default;
+  WorkUnit& operator=(const WorkUnit &other) = delete;
+  WorkUnit& operator=(WorkUnit &&other) = default;
 
   /** @brief Work unit comparator
    *  @param[in] other Work unit to compare
