@@ -332,7 +332,7 @@ struct AreaSizeComparator
 
 }
 
-Atlas Atlas::build(const std::vector<std::string> &paths)
+Atlas Atlas::build(const std::vector<std::string> &paths, bool trim)
 {
   std::vector<Magick::Image> images;
 
@@ -340,7 +340,14 @@ Atlas Atlas::build(const std::vector<std::string> &paths)
   for(const auto &path: paths)
   {
     Magick::Image img(path);
-    img.attribute("index", std::to_string(i++));
+
+    if(trim)
+    {
+      img.trim();
+      img.page(Magick::Geometry(img.columns(), img.rows()));
+    }
+
+    img.attribute("index", std::to_string(i));
     images.push_back(img);
   }
 

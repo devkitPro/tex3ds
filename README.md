@@ -14,6 +14,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
     -p, --preview <preview>      Output preview file
     -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high
     -r, --raw                    Output image data only
+    -t, --trim                   Trim input image(s)
     -v, --version                Show version and copyright information
     -z, --compress <compression> Compress output. See "Compression Options"
     --atlas                      Generate texture atlas

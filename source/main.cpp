@@ -226,6 +226,9 @@ FilterType filter_type = Magick::UndefinedFilter;
 /** @brief Processing mode option */
 ProcessingMode process_mode = PROCESS_NORMAL;
 
+/** @brief Trim input images */
+bool trim = false;
+
 /** @brief Output subimage data */
 std::vector<SubImage> subimage_data;
 
@@ -1218,6 +1221,7 @@ void print_usage(const char *prog)
     "    -p, --preview <preview>      Output preview file\n"
     "    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
     "    -r, --raw                    Output image data only\n"
+    "    -t, --trim                   Trim input image(s)\n"
     "    -v, --version                Show version and copyright information\n"
     "    -z, --compress <compression> Compress output. See \"Compression Options\"\n"
     "    --atlas                      Generate texture atlas\n"
@@ -1335,6 +1339,7 @@ const struct option long_options[] =
   { "quality",  required_argument, nullptr, 'q', },
   { "raw",      no_argument,       nullptr, 'r', },
   { "skybox",   no_argument,       nullptr, 's', },
+  { "trim",     no_argument,       nullptr, 't', },
   { "version",  no_argument,       nullptr, 'v', },
   { "compress", required_argument, nullptr, 'z', },
   { nullptr,    no_argument,       nullptr,   0, },
@@ -1423,7 +1428,7 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
 
   // parse options
   while((c = ::getopt_long(args.size(), args.data(),
-                           "f:H:hi:m:o:p:q:rs:vz:", long_options, nullptr)) != -1)
+                           "f:H:hi:m:o:p:q:rs:tvz:", long_options, nullptr)) != -1)
   {
     switch(c)
     {
@@ -1559,6 +1564,11 @@ ParseStatus parseOptions(const std::string &cwd, std::vector<char*> &args)
         process_mode = PROCESS_SKYBOX;
         break;
 
+      case 't':
+        // trim
+        trim = true;
+        break;
+
       case 'v':
         // print version
         print_version();
@@ -1657,7 +1667,7 @@ int main(int argc, char *argv[])
     std::vector<Magick::Image> images;
     if(process_mode == PROCESS_ATLAS)
     {
-      Atlas atlas(Atlas::build(input_files));
+      Atlas atlas(Atlas::build(input_files, trim));
       subimage_data.swap(atlas.subs);
       images = load_image(atlas.img);
     }
@@ -1669,6 +1679,13 @@ int main(int argc, char *argv[])
     else
     {
       Magick::Image img(input_files[0]);
+
+      if(trim)
+      {
+        img.trim();
+        img.page(Magick::Geometry(img.columns(), img.rows()));
+      }
+
       images = load_image(img);
     }
 
