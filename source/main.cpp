@@ -962,71 +962,60 @@ void write_tex3ds_header(FILE *fp)
     encode::encode(sub, width, height, buf);
   }
 
-  write_buffer(fp, &buf[0], buf.size());
+  write_buffer(fp, buf.data(), buf.size());
 }
 
 /** @brief Dummy compression
  *  @param[in]  src    Source buffer
  *  @param[in]  len    Source length
- *  @param[out] outlen Output length
  *  @returns "Compressed" buffer
  */
-void* compress_none(const void *src, size_t len, size_t *outlen)
+std::vector<uint8_t> compressNone(const void *src, size_t len)
 {
-  uint8_t header[COMPRESSION_HEADER_SIZE];
-  size_t header_size = compression_header(header, 0x00, len);
+  const uint8_t *source = reinterpret_cast<const uint8_t*>(src);
 
-  // pad to 4 bytes
-  size_t padded_len = ((len+header_size) + 3) & ~3;
+  std::vector<uint8_t> result;
 
-  uint8_t *output = static_cast<uint8_t*>(std::calloc(1, padded_len));
-  if(!output)
-    return nullptr;
+  // append compression header
+  compressionHeader(result, 0x00, len);
 
-  std::memcpy(output, header, header_size);
-  std::memcpy(output+header_size, src, len);
-  *outlen = padded_len;
+  // add data
+  result.insert(std::end(result), source, source + len);
 
-  return output;
+  // pad the output buffer to 4 bytes
+  if(result.size() & 0x3)
+    result.resize((result.size()+3) & ~0x3);
+
+  return result;
 }
 
 /** @brief Auto-select compression
  *  @param[in]  src    Source buffer
  *  @param[in]  len    Source length
- *  @param[out] outlen Output length
  *  @returns Compressed buffer
  */
-void* compress_auto(const void *src, size_t len, size_t *outlen)
+std::vector<uint8_t> compressAuto(const void *src, size_t len)
 {
-  void   *best_output = nullptr;
-  size_t best_outlen = SIZE_MAX;
+  std::vector<uint8_t> best;
 
-  static void* (* const compress_funcs[])(const void*,size_t,size_t*) =
+  static std::vector<uint8_t> (*const compress_funcs[])(const void*,size_t) =
   {
-    compress_none,
-    lzss_encode,
-    lz11_encode,
-    //huff_encode, // broken
-    rle_encode,
+    compressNone,
+    lzssEncode,
+    lz11Encode,
+    //huffEncode, // broken
+    rleEncode,
   };
 
   for(const auto &compress: compress_funcs)
   {
-    size_t outlen;
-    void   *output = compress(src, len, &outlen);
+    std::vector<uint8_t> output = compress(src, len);
 
-    if(output && outlen < best_outlen)
-    {
-      std::free(best_output);
-      best_output = output;
-      best_outlen = outlen;
-    }
-    else
-      std::free(output);
+    if(best.empty() || (!output.empty() && output.size() < best.size()))
+      best.swap(output);
   }
 
-  *outlen = best_outlen;
-  return best_output;
+  return best;
 }
 
 /** @brief Write image data
@@ -1034,33 +1023,33 @@ void* compress_auto(const void *src, size_t len, size_t *outlen)
  */
 void write_image_data(FILE *fp)
 {
-  void* (*compress)(const void*,size_t,size_t*) = nullptr;
+  std::vector<uint8_t> (*compress)(const void*,size_t) = nullptr;
 
   // get the compression routine
   switch(compression_format)
   {
     case COMPRESSION_NONE:
-      compress = compress_none;
+      compress = compressNone;
       break;
 
     case COMPRESSION_LZ10:
-      compress = lzss_encode;
+      compress = lzssEncode;
       break;
 
     case COMPRESSION_LZ11:
-      compress = lz11_encode;
+      compress = lz11Encode;
       break;
 
     case COMPRESSION_RLE:
-      compress = rle_encode;
+      compress = rleEncode;
       break;
 
     case COMPRESSION_HUFF:
-      compress = huff_encode;
+      compress = huffEncode;
       break;
 
     case COMPRESSION_AUTO:
-      compress = compress_auto;
+      compress = compressAuto;
       break;
 
     default:
@@ -1069,30 +1058,15 @@ void write_image_data(FILE *fp)
   }
 
   // compress data
-  size_t  outlen;
-  uint8_t *buffer = reinterpret_cast<uint8_t*>(compress(image_data.data(),
-                                                        image_data.size(),
-                                                        &outlen));
-  if(!buffer)
+  std::vector<uint8_t> buffer = compress(image_data.data(), image_data.size());
+  if(buffer.empty())
   {
     std::fclose(fp);
     throw std::runtime_error("Failed to compress data");
   }
 
   // output data
-  try
-  {
-    write_buffer(fp, buffer, outlen);
-
-    // free compressed buffer
-    std::free(buffer);
-  }
-  catch(...)
-  {
-    // free compressed buffer
-    std::free(buffer);
-    throw;
-  }
+  write_buffer(fp, buffer.data(), buffer.size());
 }
 
 /** @brief Write output data

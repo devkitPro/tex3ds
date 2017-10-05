@@ -10,11 +10,6 @@ AM_INIT_AUTOMAKE
 
 # Checks for programs.
 AC_PROG_CXX
-AC_PROG_CC
-
-AC_LANG_PUSH([C])
-AX_CHECK_COMPILE_FLAG([-std=c99], [CFLAGS+=" -std=c99"])
-AC_LANG_POP()
 
 AC_LANG_PUSH([C++])
 AX_CHECK_COMPILE_FLAG([-Wall],      [CPPFLAGS+=" -Wall"])
@@ -44,21 +39,10 @@ PKG_CONFIG=$_save_PKG_CONFIG[]dnl
 PKG_CHECK_MODULES_STATIC(ImageMagick, [Magick++ >= 6.0.0])
 
 # Checks for header files.
-AC_CHECK_HEADERS([limits.h stddef.h stdint.h stdlib.h string.h unistd.h])
-
-# Checks for typedefs, structures, and compiler characteristics.
-AC_CHECK_HEADER_STDBOOL
-AC_C_INLINE
-AC_TYPE_OFF_T
-AC_TYPE_SIZE_T
-AC_TYPE_SSIZE_T
-AC_TYPE_UINT16_T
-AC_TYPE_UINT32_T
-AC_TYPE_UINT64_T
-AC_TYPE_UINT8_T
+AC_CHECK_HEADERS([unistd.h])
 
 # Checks for library functions.
-AC_CHECK_FUNCS([memrchr memset pow strcasecmp])
+AC_CHECK_FUNCS([strcasecmp])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

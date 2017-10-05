@@ -21,8 +21,6 @@
  *  @brief Run-length encoding compression routines
  */
 
-/** @brief Enable internal compression routines */
-#define COMPRESSION_INTERNAL
 #include "compress.h"
 #include <assert.h>
 #include <stdint.h>
@@ -38,31 +36,19 @@
 /** @brief Maximum copy length */
 #define RLE_MAX_COPY 128
 
-void*
-rle_encode(const void *source,
-           size_t     len,
-           size_t     *outlen)
+std::vector<uint8_t>
+rleEncode(const void *source, size_t len)
 {
-  const uint8_t *src = (const uint8_t*)source;
-  const uint8_t *save = src, *end = src + len;
-  buffer_t      result;
-  size_t        save_len = 0, run, header_size;
-  uint8_t       header[COMPRESSION_HEADER_SIZE];
+  // create output buffer
+  std::vector<uint8_t> result;
 
-  // initialize output buffer
-  buffer_init(&result);
-
-  // fill compression header
-  header_size = compression_header(header, 0x30, len);
-
-  // append compression header to output data
-  if(buffer_push(&result, header, header_size) != 0)
-  {
-    buffer_destroy(&result);
-    return NULL;
-  }
+  // append compression header
+  compressionHeader(result, 0x30, len);
 
   // encode all bytes
+  const uint8_t *src = (const uint8_t*)source;
+  const uint8_t *save = src, *end = src + len;
+  size_t        save_len = 0, run;
   while(src < end)
   {
     // calculate current run
@@ -82,16 +68,10 @@ rle_encode(const void *source,
     // check if we need to encode a copy
     if(save_len == RLE_MAX_COPY || (save_len > 0 && run > 2))
     {
-      // encode copy length
-      uint8_t byte = save_len - 1;
-
-      // append copy length followed by copy buffer
-      if(buffer_push(&result, &byte, 1) != 0
-      || buffer_push(&result, save, save_len) != 0)
-      {
-        buffer_destroy(&result);
-        return NULL;
-      }
+      // append encoded copy length followed by copy buffer
+      assert(save_len - 1 < RLE_MAX_COPY);
+      result.push_back(save_len - 1);
+      result.insert(std::end(result), save, save + save_len);
 
       // reset save point
       save     += save_len;
@@ -101,15 +81,10 @@ rle_encode(const void *source,
     // check if run is long enough to encode
     if(run > 2)
     {
-      // encode run
-      uint8_t bytes[2] = { 0x80 | (run - 3), *src, };
-
-      // append run to output buffer
-      if(buffer_push(&result, bytes, 2) != 0)
-      {
-        buffer_destroy(&result);
-        return NULL;
-      }
+      // append encoded run to output buffer
+      assert(run-3 < RLE_MAX_RUN);
+      result.push_back(0x80 | (run - 3));
+      result.push_back(*src);
 
       // reset save point
       src  += run;
@@ -123,36 +98,24 @@ rle_encode(const void *source,
   // check if there is data left to copy
   if(save_len)
   {
-    // encode copy length
-    uint8_t byte = save_len - 1;
-
-    // append copy length followed by copy buffer
-    if(buffer_push(&result, &byte, 1) != 0
-    || buffer_push(&result, save, save_len) != 0)
-    {
-      buffer_destroy(&result);
-      return NULL;
-    }
+    // append encoded copy length followed by copy buffer
+    assert(save_len - 1 < RLE_MAX_COPY);
+    result.push_back(save_len - 1);
+    result.insert(std::end(result), save, save + save_len);
   }
 
   // pad the output buffer to 4 bytes
-  if(buffer_pad(&result, 4) != 0)
-  {
-    buffer_destroy(&result);
-    return NULL;
-  }
-
-  // set the output length
-  *outlen = result.len;
+  if(result.size() & 0x3)
+    result.resize((result.size()+3) & ~0x3);
 
   // return the output data
-  return result.data;
+  return result;
 }
 
 void
-rle_decode(const void *source,
-           void       *dest,
-           size_t     size)
+rleDecode(const void *source,
+          void       *dest,
+          size_t     size)
 {
   const uint8_t *src = (const uint8_t*)source;
   uint8_t       *dst = (uint8_t*)dest;
