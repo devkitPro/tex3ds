@@ -1594,8 +1594,8 @@ int main(int argc, char *argv[])
   std::string cwd;
   prog = argv[0];
 
-  setlinebuf(stdout);
-  setlinebuf(stderr);
+  std::setvbuf(stdout, nullptr, _IOLBF, 0);
+  std::setvbuf(stderr, nullptr, _IOLBF, 0);
 
   {
     std::vector<char> cwd_tmp(PATH_MAX);
