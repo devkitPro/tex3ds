@@ -32,8 +32,16 @@ AC_CHECK_PROGS([DOT], [dot])
 AM_CONDITIONAL([HAVE_DOT], [test -n "$DOT"])
 AM_COND_IF([HAVE_DOT], AC_SUBST(HAVE_DOT, ["YES"], AC_SUBST(HAVE_DOT, ["NO"])))
 
+AC_DEFUN([PKG_CHECK_MODULES_STATIC],
+[AC_REQUIRE([PKG_PROG_PKG_CONFIG])dnl
+_save_PKG_CONFIG=$PKG_CONFIG
+PKG_CONFIG="$PKG_CONFIG --static"
+PKG_CHECK_MODULES([$1], [$2], [$3], [$4], [$5])
+PKG_CONFIG=$_save_PKG_CONFIG[]dnl
+])
+
 # Checks for libraries.
-PKG_CHECK_MODULES(ImageMagick, [Magick++ >= 6.0.0])
+PKG_CHECK_MODULES_STATIC(ImageMagick, [Magick++ >= 6.0.0])
 
 # Checks for header files.
 AC_CHECK_HEADERS([limits.h stddef.h stdint.h stdlib.h string.h unistd.h])
