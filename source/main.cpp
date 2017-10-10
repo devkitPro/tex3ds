@@ -1330,12 +1330,32 @@ enum ParseStatus
 const char *prog;
 std::vector<std::string> input_files;
 
-std::string getPath(const std::string &cwd, const std::string &path)
+std::string getPath(const std::string &cwd, std::string path)
 {
-  if(path[0] == '/')
-    return path;
+#ifdef WIN32
+  std::replace(path.begin(), path.end(), '\\', '/');
+#endif
 
-  return cwd + '/' + path;
+  std::string acc;
+  if((path.size() > 1 && path[0] == '/')
+#ifdef WIN32
+     || (path.size() > 3 && path[1] == ':' && path[2] == '/')
+#endif
+    )
+    acc = std::move(path); // absolute path
+  else
+  {
+    // relative path
+    acc = cwd;
+#ifdef WIN32
+    std::replace(acc.begin(), acc.end(), '\\', '/');
+#endif
+    if(acc.back() != '/')
+      acc.push_back('/');
+    acc += path;
+  }
+
+  return acc;
 }
 
 std::vector<std::string> readOptions(const std::string &path)
