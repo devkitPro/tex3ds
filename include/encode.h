@@ -24,10 +24,10 @@
  *  for ETC1/ETC1A4 which do not involve swizzling.
  */
 #pragma once
+#include <cassert>
 #include "magick_compat.h"
 #include "rg_etc1.h"
 #include "subimage.h"
-#include <cassert>
 #include <vector>
 
 /** @namespace encode
