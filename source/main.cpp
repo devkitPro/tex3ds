@@ -354,6 +354,8 @@ std::vector<Magick::Image> load_image(Magick::Image &img)
     // extract the six faces from cubemap/skybox
     // PICA 200 cubemapping inverts texture vertical axis
     Magick::Image copy;
+    output_width  = width;
+    output_height = height;
 
     // +x
     copy = img;
