@@ -347,7 +347,7 @@ Atlas Atlas::build(const std::vector<std::string> &paths, bool trim)
       img.page(Magick::Geometry(img.columns(), img.rows()));
     }
 
-    img.attribute("index", std::to_string(i));
+    img.attribute("index", std::to_string(i++));
     images.push_back(img);
   }
 
