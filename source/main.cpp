@@ -351,6 +351,10 @@ std::vector<Magick::Image> load_image(Magick::Image &img)
                  static_cast<float>(copy.columns()) / img.columns(),
                  1.0f - (static_cast<float>(copy.rows()) / img.rows())));
     }
+    else
+    {
+      subimage_data.push_back(SubImage(0, "", 0.0f, 1.0f, 1.0f, 0.0f));
+    }
 
     output_width  = img.columns();
     output_height = img.rows();
