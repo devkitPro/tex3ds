@@ -1,9 +1,11 @@
-#include "atlas.h"
-#include "subimage.h"
 #include <algorithm>
 #include <cstdio>
 #include <set>
 #include <vector>
+#include <cmath>
+
+#include "atlas.h"
+#include "subimage.h"
 
 namespace
 {
