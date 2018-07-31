@@ -21,12 +21,14 @@
  *  @brief Huffman compression routines
  */
 
-#include "compress.h"
 #include <algorithm>
 #include <bitset>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <queue>
+
+#include "compress.h"
 
 #if __cplusplus < 201402L
 namespace std

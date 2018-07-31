@@ -26,6 +26,7 @@
 #include <condition_variable>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <queue>
 #include <set>
