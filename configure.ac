@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([tex3ds], [1.0.0], [pigman46@gmail.com])
+AC_INIT([tex3ds], [1.0.1], [https://github.com/devkitPro/tex3ds/issues])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([source/main.cpp])
 
