@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
-/** @file lzss.c
+/** @file lzss.cpp
  *  @brief LZSS/LZ10/LZ11 compression routines
  */
 
@@ -92,7 +92,7 @@ find_best_match(const uint8_t *start, const uint8_t *buffer, size_t len,
     size_t test_len = 1;
     for(size_t i = 1; i < len; ++i)
     {
-      if(*(p+i) == *(buffer+i))
+      if(p[i] == buffer[i])
         ++test_len;
       else
         break;
@@ -177,11 +177,7 @@ lzssCommonEncode(const uint8_t *buffer,
     if(buffer != start)
     {
       // find best match
-      if(len < max_len)
-        tmp = find_best_match(start, buffer, len, max_disp, tmplen);
-      else
-        tmp = find_best_match(start, buffer, max_len, max_disp, tmplen);
-
+      tmp = find_best_match(start, buffer, std::min(len, max_len), max_disp, tmplen);
       if(tmp != NULL)
       {
         assert(tmp >= start);
@@ -206,20 +202,14 @@ lzssCommonEncode(const uint8_t *buffer,
       size_t skip_len, next_len;
 
       // get best match starting at the next byte
-      if(len+1 < max_len)
-        find_best_match(start, buffer+1, len-1, max_disp, skip_len);
-      else
-        find_best_match(start, buffer+1, max_len, max_disp, skip_len);
+      find_best_match(start, buffer+1, std::min(len-1, max_len), max_disp, skip_len);
 
       // check if the match is too small to compress
       if(skip_len < 3)
         skip_len = 1;
 
       // get best match for data following the current compressed chunk
-      if(len+tmplen < max_len)
-        find_best_match(start, buffer+tmplen, len-tmplen, max_disp, next_len);
-      else
-        find_best_match(start, buffer+tmplen, max_len, max_disp, next_len);
+      find_best_match(start, buffer+tmplen, std::min(len-tmplen, max_len), max_disp, next_len);
 
       // check if the match is too small to compress
       if(next_len < 3)
