@@ -17,8 +17,8 @@
  * You should have received a copy of the GNU General Public License
  * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
-/** @file main.cpp
- *  @brief Program entry point
+/** @file tex3ds.cpp
+ *  @brief tex3ds program entry point
  */
 #include <algorithm>
 #include <cassert>
@@ -1211,8 +1211,8 @@ void write_header()
 void print_version()
 {
   std::printf(
-    "tex3ds v1.0.0\n"
-    "Copyright (c) 2017 Michael Theall (mtheall)\n\n"
+    "tex3ds v1.0.1\n"
+    "Copyright (c) 2019 Michael Theall (mtheall)\n\n"
 
     "tex3ds is free software: you can redistribute it and/or modify\n"
     "it under the terms of the GNU General Public License as published by\n"
