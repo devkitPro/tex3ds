@@ -47,11 +47,17 @@ void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
   data.reserve(data.size() + w*h/2);
 
   Magick::Pixels cache(sheet);
-  PixelPacket p = cache.get(0, 0, w, h);
-  for(unsigned i = 0; i < w*h; i += 2)
+  for(unsigned y = 0; y < h; y += 8)
   {
-    data.emplace_back((quantum_to_bits<4>(quantumAlpha(p[i+1])) << 4)
-                    | (quantum_to_bits<4>(quantumAlpha(p[i+0])) << 0));
+    for(unsigned x = 0; x < w; x += 8)
+    {
+      PixelPacket p = cache.get(x, y, 8, 8);
+      for(unsigned i = 0; i < 8*8; i += 2)
+      {
+        data.emplace_back((quantum_to_bits<4>(quantumAlpha(p[i+1])) << 4)
+                        | (quantum_to_bits<4>(quantumAlpha(p[i+0])) << 0));
+      }
+    }
   }
 }
 
@@ -256,6 +262,11 @@ bool BCFNT::serialize(const std::string &path)
   const std::uint32_t tglpOffset = fileSize;
   fileSize += 0x20; // TGLP header
 
+  constexpr std::uint32_t ALIGN = 0x200;
+  constexpr std::uint32_t MASK  = ALIGN - 1;
+  const std::uint32_t sheetOffset = (fileSize + MASK) & ~MASK;
+  fileSize = sheetOffset + sheetData.size();
+
   // CWDH headers + data
   const std::uint32_t cwdhOffset = fileSize;
   fileSize += 0x10;              // CWDH header
@@ -280,9 +291,6 @@ bool BCFNT::serialize(const std::string &path)
     }
   }
 
-  const std::uint32_t sheetOffset = fileSize;
-  fileSize += sheetData.size();
-
   // FINF, TGLP, CWDH, CMAPs
   std::uint32_t numBlocks = 3 + cmaps.size();
 
@@ -290,7 +298,10 @@ bool BCFNT::serialize(const std::string &path)
   output << "CFNT"                                 // magic
          << static_cast<std::uint16_t>(0xFEFF)     // byte-order-mark
          << static_cast<std::uint16_t>(0x14)       // header size
-         << static_cast<std::uint32_t>(0x3)        // version
+         << static_cast<std::uint8_t>(0x3)         // version
+         << static_cast<std::uint8_t>(0x0)         // version
+         << static_cast<std::uint8_t>(0x0)         // version
+         << static_cast<std::uint8_t>(0x0)         // version
          << static_cast<std::uint32_t>(fileSize)   // file size
          << static_cast<std::uint32_t>(numBlocks); // number of blocks
 
@@ -302,8 +313,8 @@ bool BCFNT::serialize(const std::string &path)
          << static_cast<std::uint8_t>(lineFeed)      // line feed
          << static_cast<std::uint16_t>(altIndex)     // alternate char index
          << static_cast<std::uint8_t>(0x0)           // default width (left)
-         << static_cast<std::uint8_t>(0x0)           // default width (glyph width)
-         << static_cast<std::uint8_t>(0x0)           // default width (char width)
+         << static_cast<std::uint8_t>(0x1)           // default width (glyph width)
+         << static_cast<std::uint8_t>(0x1)           // default width (char width)
          << static_cast<std::uint8_t>(0x1)           // encoding
          << static_cast<std::uint32_t>(tglpOffset+8) // TGLP offset
          << static_cast<std::uint32_t>(cwdhOffset+8) // CWDH offset
@@ -314,21 +325,28 @@ bool BCFNT::serialize(const std::string &path)
          << static_cast<std::uint8_t>(0x0);          // padding
 
   // TGLP header
+  const std::uint32_t sheetSize = sheetData.size() / numSheets;
   assert(output.size() == tglpOffset);
-  output << "TGLP"                                       // magic
-         << static_cast<std::uint32_t>(0x20)             // section size
-         << static_cast<std::uint8_t>(24)                // cell width
-         << static_cast<std::uint8_t>(30)                // cell height
-         << static_cast<std::uint8_t>(ascent)            // cell baseline
-         << static_cast<std::uint8_t>(maxWidth)          // max character width
-         << static_cast<std::uint32_t>(sheetData.size()) // sheet data size
-         << static_cast<std::uint16_t>(numSheets)        // number of sheets
-         << static_cast<std::uint16_t>(0xB)              // 4-bit alpha format
-         << static_cast<std::uint16_t>(10)               // num columns
-         << static_cast<std::uint16_t>(10)               // num rows
-         << static_cast<std::uint16_t>(256)              // sheet width
-         << static_cast<std::uint16_t>(512)              // sheet height
-         << static_cast<std::uint32_t>(sheetOffset);     // sheet data offset
+  output << "TGLP"                                   // magic
+         << static_cast<std::uint32_t>(0x20)         // section size
+         << static_cast<std::uint8_t>(24)            // cell width
+         << static_cast<std::uint8_t>(30)            // cell height
+         << static_cast<std::uint8_t>(ascent)        // cell baseline
+         << static_cast<std::uint8_t>(maxWidth)      // max character width
+         << static_cast<std::uint32_t>(sheetSize)    // sheet data size
+         << static_cast<std::uint16_t>(numSheets)    // number of sheets
+         << static_cast<std::uint16_t>(0xB)          // 4-bit alpha format
+         << static_cast<std::uint16_t>(10)           // num columns
+         << static_cast<std::uint16_t>(17)           // num rows
+         << static_cast<std::uint16_t>(256)          // sheet width
+         << static_cast<std::uint16_t>(512)          // sheet height
+         << static_cast<std::uint32_t>(sheetOffset); // sheet data offset
+
+  assert(output.size() <= sheetOffset);
+  output.resize(sheetOffset);
+  assert(output.size() == sheetOffset);
+  output.reserve(output.size() + sheetData.size());
+  output.insert(output.end(), sheetData.begin(), sheetData.end());
 
   // CWDH header + data
   assert(output.size() == cwdhOffset);
@@ -384,10 +402,6 @@ bool BCFNT::serialize(const std::string &path)
     cmapOffset += size;
   }
 
-  assert(output.size() == sheetOffset);
-  output.reserve(output.size() + sheetData.size());
-  output.insert(output.end(), sheetData.begin(), sheetData.end());
-
   assert(output.size() == fileSize);
 
   FILE *fp = std::fopen(path.c_str(), "wb");
@@ -421,6 +435,7 @@ bool BCFNT::serialize(const std::string &path)
      return false;
   }
 
+  std::printf("Generated font with %zu glyphs\n", widths.size());
   return true;
 }
 }
