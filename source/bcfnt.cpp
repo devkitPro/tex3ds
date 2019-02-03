@@ -37,6 +37,19 @@
 
 namespace
 {
+/* todo: make configurable */
+constexpr auto CELL_WIDTH   = 24;
+constexpr auto CELL_HEIGHT  = 30;
+constexpr auto SHEET_WIDTH  = 256;
+constexpr auto SHEET_HEIGHT = 512;
+
+/* DO NOT EDIT */
+constexpr auto GLYPH_WIDTH      = CELL_WIDTH + 1;
+constexpr auto GLYPH_HEIGHT     = CELL_HEIGHT + 1;
+constexpr auto GLYPHS_PER_ROW   = SHEET_WIDTH / GLYPH_WIDTH;
+constexpr auto GLYPHS_PER_COL   = SHEET_HEIGHT / GLYPH_HEIGHT;
+constexpr auto GLYPHS_PER_SHEET = GLYPHS_PER_ROW * GLYPHS_PER_COL;
+
 void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
 {
   swizzle(sheet, false);
@@ -194,7 +207,7 @@ BCFNT::BCFNT(FT_Face face)
       // add char width info to cwdh
       widths.emplace_back(CharWidthInfo{left, glyphWidth, charWidth});
 
-      if(faceMap[code].cfntIndex % 170 == 0)
+      if(faceMap[code].cfntIndex % GLYPHS_PER_SHEET == 0)
       {
         if(sheet)
         {
@@ -207,22 +220,22 @@ BCFNT::BCFNT(FT_Face face)
 
       assert(sheet);
 
-      const unsigned sheetIndex = faceMap[code].cfntIndex % 170;
-      const unsigned sheetX = (sheetIndex % 10) * 24;
-      const unsigned sheetY = (sheetIndex / 10) * 30;
+      const unsigned sheetIndex = faceMap[code].cfntIndex % GLYPHS_PER_SHEET;
+      const unsigned sheetX = (sheetIndex % GLYPHS_PER_ROW) * GLYPH_WIDTH + 1;
+      const unsigned sheetY = (sheetIndex / GLYPHS_PER_ROW) * GLYPH_HEIGHT + 1;
 
       Magick::Pixels cache(*sheet);
-      assert(sheetX + 24 < sheet->columns());
-      assert(sheetY + 30 < sheet->rows());
-      PixelPacket p = cache.get(sheetX, sheetY, 24, 30);
+      assert(sheetX + CELL_WIDTH < sheet->columns());
+      assert(sheetY + CELL_HEIGHT < sheet->rows());
+      PixelPacket p = cache.get(sheetX, sheetY, CELL_WIDTH, CELL_HEIGHT);
       for(unsigned y = 0; y < face->glyph->bitmap.rows; ++y)
       {
         for(unsigned x = 0; x < face->glyph->bitmap.width; ++x)
         {
-          const int px = x + face->glyph->bitmap_left;
+          const int px = x;
           const int py = y + (baseline - face->glyph->bitmap_top);
 
-          if(px < 0 || px >= 24 || py < 0 || py >= 30)
+          if(px < 0 || px >= CELL_WIDTH || py < 0 || py >= CELL_HEIGHT)
             continue;
 
           const std::uint8_t v = face->glyph->bitmap.buffer[y * face->glyph->bitmap.width + x];
@@ -233,7 +246,7 @@ BCFNT::BCFNT(FT_Face face)
           quantumBlue(c,  bits_to_quantum<8>(0));
           quantumAlpha(c, bits_to_quantum<8>(v));
 
-          p[py*24 + px] = c;
+          p[py*CELL_WIDTH + px] = c;
         }
       }
       cache.sync();
@@ -327,20 +340,20 @@ bool BCFNT::serialize(const std::string &path)
   // TGLP header
   const std::uint32_t sheetSize = sheetData.size() / numSheets;
   assert(output.size() == tglpOffset);
-  output << "TGLP"                                   // magic
-         << static_cast<std::uint32_t>(0x20)         // section size
-         << static_cast<std::uint8_t>(24)            // cell width
-         << static_cast<std::uint8_t>(30)            // cell height
-         << static_cast<std::uint8_t>(ascent)        // cell baseline
-         << static_cast<std::uint8_t>(maxWidth)      // max character width
-         << static_cast<std::uint32_t>(sheetSize)    // sheet data size
-         << static_cast<std::uint16_t>(numSheets)    // number of sheets
-         << static_cast<std::uint16_t>(0xB)          // 4-bit alpha format
-         << static_cast<std::uint16_t>(10)           // num columns
-         << static_cast<std::uint16_t>(17)           // num rows
-         << static_cast<std::uint16_t>(256)          // sheet width
-         << static_cast<std::uint16_t>(512)          // sheet height
-         << static_cast<std::uint32_t>(sheetOffset); // sheet data offset
+  output << "TGLP"                                     // magic
+         << static_cast<std::uint32_t>(0x20)           // section size
+         << static_cast<std::uint8_t>(CELL_WIDTH)      // cell width
+         << static_cast<std::uint8_t>(CELL_HEIGHT)     // cell height
+         << static_cast<std::uint8_t>(ascent)          // cell baseline
+         << static_cast<std::uint8_t>(maxWidth)        // max character width
+         << static_cast<std::uint32_t>(sheetSize)      // sheet data size
+         << static_cast<std::uint16_t>(numSheets)      // number of sheets
+         << static_cast<std::uint16_t>(0xB)            // 4-bit alpha format
+         << static_cast<std::uint16_t>(GLYPHS_PER_ROW) // num columns
+         << static_cast<std::uint16_t>(GLYPHS_PER_COL) // num rows
+         << static_cast<std::uint16_t>(SHEET_WIDTH)    // sheet width
+         << static_cast<std::uint16_t>(SHEET_HEIGHT)   // sheet height
+         << static_cast<std::uint32_t>(sheetOffset);   // sheet data offset
 
   assert(output.size() <= sheetOffset);
   output.resize(sheetOffset);
