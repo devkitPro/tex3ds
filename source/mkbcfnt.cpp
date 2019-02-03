@@ -120,12 +120,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  if(output_path.empty())
-  {
-    std::fprintf(stderr, "No output file provided\n");
-    return EXIT_FAILURE;
-  }
-
   if(optind >= argc)
   {
     std::fprintf(stderr, "No input file provided\n");
@@ -139,6 +133,12 @@ int main(int argc, char *argv[])
   }
 
   std::string input_path = argv[optind];
+
+  if(output_path.empty())
+  {
+    output_path = input_path.substr(0, input_path.find_last_of('.'))+".bcfnt";
+    std::fprintf(stderr, "No output file provided. Automaticly choosing one.\n");
+  }
 
   FT_Library library;
   FT_Error error = FT_Init_FreeType(&library);

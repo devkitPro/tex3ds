@@ -37,7 +37,7 @@ PKG_CONFIG=$_save_PKG_CONFIG[]dnl
 
 # Checks for libraries.
 PKG_CHECK_MODULES_STATIC(FreeType, [freetype2])
-PKG_CHECK_MODULES_STATIC(ImageMagick, [Magick++ >= 6.0.0])
+PKG_CHECK_MODULES_STATIC(ImageMagick, [Magick++ >= 6.0.0 Magick++ < 7.0.0])
 
 # Checks for header files.
 AC_CHECK_HEADERS([unistd.h])
