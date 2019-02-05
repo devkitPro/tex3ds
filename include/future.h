@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -17,27 +17,23 @@
  * You should have received a copy of the GNU General Public License
  * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
-/** @file atlas.h
- *  @brief Atlas interface.
+/** @file future.h
+ *  @brief C++ future compatibility.
  */
 #pragma once
-#include <string>
-#include <vector>
-#include "magick_compat.h"
-#include "subimage.h"
 
-struct Atlas
+#include <memory>
+
+namespace future
 {
-  Magick::Image         img;
-  std::vector<SubImage> subs;
-
-  Atlas()
-  { }
-
-  Atlas(const Atlas &other) = delete;
-  Atlas(Atlas &&other) = default;
-  Atlas& operator=(const Atlas &other) = delete;
-  Atlas& operator=(Atlas &&other) = delete;
-
-  static Atlas build(const std::vector<std::string> &paths, bool trim);
-};
+#if __cplusplus < 201402L
+template<typename T, typename... Args>
+inline std::unique_ptr<T>
+make_unique(Args&&... args)
+{
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+#else
+using std::make_unique;
+#endif
+}

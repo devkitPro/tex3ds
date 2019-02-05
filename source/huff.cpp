@@ -29,20 +29,7 @@
 #include <queue>
 
 #include "compress.h"
-
-#if __cplusplus < 201402L
-namespace std
-{
-
-template<typename T, typename... Args>
-inline std::unique_ptr<T>
-make_unique(Args&&... args)
-{
-  return unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
-
-}
-#endif
+#include "future.h"
 
 namespace
 {
@@ -488,7 +475,7 @@ buildTree(const uint8_t *src,
     for(const auto &count: histogram)
     {
       if(count > 0)
-        nodes.push_back(std::make_unique<Node>(val, count));
+        nodes.push_back(future::make_unique<Node>(val, count));
 
       ++val;
     }
@@ -507,8 +494,8 @@ buildTree(const uint8_t *src,
               { return *lhs < *rhs; });
 
     // allocate a parent node
-    std::unique_ptr<Node> node = std::make_unique<Node>(std::move(nodes[0]),
-                                                        std::move(nodes[1]));
+    std::unique_ptr<Node> node = future::make_unique<Node>(std::move(nodes[0]),
+                                                           std::move(nodes[1]));
 
     // replace first node with self
     nodes[0] = std::move(node);

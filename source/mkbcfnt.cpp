@@ -23,6 +23,7 @@
  */
 #include "bcfnt.h"
 #include "ft_error.h"
+#include "future.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -36,7 +37,9 @@ void print_version()
 {
   std::printf(
     "mkbcfnt v1.0.1\n"
-    "Copyright (c) 2019 Michael Theall (mtheall)\n\n"
+    "Copyright (c) 2019\n"
+    "    Michael Theall (mtheall)\n"
+    "    piepie62\n\n"
 
     "mkbcfnt is free software: you can redistribute it and/or modify\n"
     "it under the terms of the GNU General Public License as published by\n"
@@ -175,7 +178,7 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  auto bcfnt = std::make_unique<bcfnt::BCFNT> (face);
+  auto bcfnt = future::make_unique<bcfnt::BCFNT> (face);
   const int code = bcfnt->serialize(output_path) ? EXIT_SUCCESS : EXIT_FAILURE;
 
   FT_Done_Face(face);

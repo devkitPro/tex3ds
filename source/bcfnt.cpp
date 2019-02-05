@@ -22,13 +22,14 @@
  *  @brief BCFNT definitions
  */
 
+#include <cassert>
 #include "bcfnt.h"
 #include "ft_error.h"
+#include "future.h"
 #include "magick_compat.h"
 #include "quantum.h"
 #include "swizzle.h"
 
-#include <cassert>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -121,9 +122,19 @@ namespace bcfnt
 {
 struct CharMap
 {
-  const FT_ULong      code      = 0; ///< Code point.
-  const FT_UInt       faceIndex = 0; ///< FreeType face index.
-  const std::uint16_t cfntIndex = 0; ///< CFNT glyph index.
+  CharMap()
+  : code (0), faceIndex (0), cfntIndex (0)
+  {
+  }
+
+  CharMap(FT_ULong code, FT_UInt faceIndex)
+  : code (code), faceIndex (faceIndex), cfntIndex (0)
+  {
+  }
+
+  const FT_ULong code;      ///< Code point.
+  const FT_UInt  faceIndex; ///< FreeType face index.
+  std::uint16_t  cfntIndex; ///< CFNT glyph index.
 };
 
 BCFNT::BCFNT(FT_Face face)
@@ -136,23 +147,30 @@ BCFNT::BCFNT(FT_Face face)
 
   std::map<FT_ULong, CharMap> faceMap;
 
-  std::uint16_t cfntIndex = 0;
-  FT_UInt faceIndex;
-  FT_ULong code = FT_Get_First_Char(face, &faceIndex);
-  while(code != 0)
   {
-    // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
-    if(code >= std::numeric_limits<std::uint16_t>::max())
-      continue;
+    // extract mappings from font face
+    FT_UInt faceIndex;
+    FT_ULong code = FT_Get_First_Char(face, &faceIndex);
+    while(code != 0)
+    {
+      // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
+      if(code >= std::numeric_limits<std::uint16_t>::max())
+        continue;
 
-    assert(cfntIndex != std::numeric_limits<std::uint16_t>::max());
-
-    faceMap.emplace(code, CharMap{code, faceIndex, cfntIndex++});
-    code = FT_Get_Next_Char(face, code, &faceIndex);
+      faceMap.emplace(code, CharMap(code, faceIndex));
+      code = FT_Get_Next_Char(face, code, &faceIndex);
+    }
   }
 
   if(faceMap.empty())
     return;
+
+  {
+    // fill in CFNT index
+    std::uint16_t cfntIndex = 0;
+    for(auto &pair: faceMap)
+      pair.second.cfntIndex = cfntIndex++;
+  }
 
   // try to provide a replacement character
   if(faceMap.count(0xFFFD))
@@ -175,7 +193,7 @@ BCFNT::BCFNT(FT_Face face)
       cmaps.emplace_back();
       auto &cmap = cmaps.back();
       cmap.codeBegin = cmap.codeEnd = code;
-      cmap.data = std::make_unique<CMAPDirect>(charMap.cfntIndex);
+      cmap.data = future::make_unique<CMAPDirect>(charMap.cfntIndex);
       cmap.mappingMethod = cmap.data->type();
     }
     else
@@ -215,7 +233,8 @@ BCFNT::BCFNT(FT_Face face)
           ++numSheets;
         }
 
-        sheet = std::make_unique<Magick::Image>(Magick::Geometry(256, 512), transparent());
+        sheet = future::make_unique<Magick::Image>(
+          Magick::Geometry(SHEET_WIDTH, SHEET_HEIGHT), transparent());
       }
 
       assert(sheet);
@@ -275,7 +294,7 @@ bool BCFNT::serialize(const std::string &path)
   const std::uint32_t tglpOffset = fileSize;
   fileSize += 0x20; // TGLP header
 
-  constexpr std::uint32_t ALIGN = 0x200;
+  constexpr std::uint32_t ALIGN = 0x1;//0x200;
   constexpr std::uint32_t MASK  = ALIGN - 1;
   const std::uint32_t sheetOffset = (fileSize + MASK) & ~MASK;
   fileSize = sheetOffset + sheetData.size();

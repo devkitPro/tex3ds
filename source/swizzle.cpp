@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2019
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
