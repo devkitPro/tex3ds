@@ -22,13 +22,13 @@
  *  @brief BCFNT definitions
  */
 
+#include <cassert>
 #include "bcfnt.h"
 #include "ft_error.h"
 #include "magick_compat.h"
 #include "quantum.h"
 #include "swizzle.h"
 
-#include <cassert>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
