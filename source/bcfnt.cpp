@@ -69,28 +69,26 @@ void coalesceCMAP(std::vector<bcfnt::CMAP> &cmaps)
   std::uint16_t codeBegin = 0xFFFF;
   std::uint16_t codeEnd = 0;
   std::unique_ptr<bcfnt::CMAPScan> scanMap = future::make_unique<bcfnt::CMAPScan>();
-  for(auto cmap = cmaps.begin(); cmap != cmaps.end(); cmap++)
+  auto cmap = cmaps.begin();
+  while (cmap != cmaps.end())
   {
-    // cmap->codeEnd AND cmap->codeBegin are inclusive, so < 8 - 1 is 16 bytes of CMAP data, the exact size needed for a CMAPDirect.
-    // Don't get rid of CMAPs above (or at, because it takes longer to search a table) this size; that takes more space than you save
-    if(cmap->mappingMethod == bcfnt::CMAPData::CMAP_TYPE_DIRECT && cmap->codeEnd - cmap->codeBegin < MIN_CHARS - 1)
+    if (cmap->mappingMethod == bcfnt::CMAPData::CMAP_TYPE_DIRECT && cmap->codeEnd - cmap->codeBegin < MIN_CHARS - 1)
     {
       if(cmap->codeBegin < codeBegin)
-      {
         codeBegin = cmap->codeBegin;
-      }
+
       if(cmap->codeEnd > codeEnd)
-      {
         codeEnd = cmap->codeEnd;
-      }
+
       for(std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
-      {
         scanMap->entries.push_back({i, i - cmap->codeBegin + dynamic_cast<bcfnt::CMAPDirect&>(*cmap->data).offset});
-      }
-      cmap = cmaps.erase(cmap) - 1;
+
+      cmap = cmaps.erase(cmap);
     }
+    else
+      ++cmap;
   }
-  cmaps.push_back({codeBegin, codeEnd, (uint16_t)bcfnt::CMAPData::CMAP_TYPE_SCAN, 0, 0, std::move(scanMap)});
+  cmaps.push_back({codeBegin, codeEnd, static_cast<uint16_t>(bcfnt::CMAPData::CMAP_TYPE_SCAN), 0, 0, std::move(scanMap)});
 }
 
 std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const char *str)
@@ -198,18 +196,15 @@ BCFNT::BCFNT(FT_Face face)
         std::fprintf(stderr, "FT_Load_Glyph: %s\n", ft_error(error));
         continue;
       }
+
       if(face->glyph->bitmap_top > ascent)
-      {
         ascent = face->glyph->bitmap_top;
-      }
-      if((int)face->glyph->bitmap_top - (int)face->glyph->bitmap.rows < descent)
-      {
+
+      if(static_cast<int>(face->glyph->bitmap_top) - static_cast<int>(face->glyph->bitmap.rows) < descent)
         descent = face->glyph->bitmap_top - face->glyph->bitmap.rows;
-      }
-      else if(face->glyph->bitmap.width > maxWidth)
-      {
+
+      if(face->glyph->bitmap.width > maxWidth)
         maxWidth = face->glyph->bitmap.width;
-      }
 
       faceMap.emplace(code, CharMap(code, faceIndex));
       code = FT_Get_Next_Char(face, code, &faceIndex);
@@ -287,9 +282,7 @@ BCFNT::BCFNT(FT_Face face)
       // add char width info to cwdh
       widths.emplace_back(CharWidthInfo{left, glyphWidth, charWidth});
       if (faceMap[code].cfntIndex == altIndex)
-      {
         defaultWidth = CharWidthInfo{left, glyphWidth, charWidth};
-      }
 
       if(faceMap[code].cfntIndex % glyphsPerSheet == 0)
       {
