@@ -66,6 +66,7 @@ void print_usage(const char *prog)
     "  Options:\n"
     "    -h, --help                   Show this help message\n"
     "    -o, --output <output>        Output file\n"
+    "    -s, --size <size>            Set font size in points\n"
     "    -v, --version                Show version and copyright information\n"
     "    <input>                      Input file\n\n"
   );
@@ -76,6 +77,7 @@ const struct option long_options[] =
 {
   { "help",     no_argument,       nullptr, 'h', },
   { "output",   required_argument, nullptr, 'o', },
+  { "size",     required_argument, nullptr, 's', },
   { "version",  no_argument,       nullptr, 'v', },
   { nullptr,    no_argument,       nullptr,   0, },
 };
@@ -95,6 +97,7 @@ int main(int argc, char *argv[])
   std::setvbuf(stderr, nullptr, _IOLBF, 0);
 
   std::string output_path;
+  int size = 22;
 
   // parse options
   int c;
@@ -110,6 +113,15 @@ int main(int argc, char *argv[])
       case 'o':
         // set output path option
         output_path = optarg;
+        break;
+
+      case 's':
+        // set font size
+        size = atoi(optarg);
+        if (!size)
+        {
+          size = 22;
+        }
         break;
 
       case 'v':
@@ -169,7 +181,7 @@ int main(int argc, char *argv[])
     return EXIT_FAILURE;
   }
 
-  error = FT_Set_Pixel_Sizes(face, 24, 30);
+  error = FT_Set_Char_Size(face, size << 6, 0, 96, 0);
   if(error)
   {
     std::fprintf(stderr, "FT_Set_Pixel_Sizes: %s\n", ft_error(error));
