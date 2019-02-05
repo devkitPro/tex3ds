@@ -129,13 +129,11 @@ private:
   std::uint8_t maxWidth;
   std::uint8_t ascent;
   
-  /* todo: make configurable */
   int cellWidth;
   int cellHeight;
   static constexpr int SHEET_WIDTH  = 256;
   static constexpr int SHEET_HEIGHT = 512;
 
-  /* DO NOT EDIT */
   int glyphWidth;
   int glyphHeight;
   int glyphsPerRow;
