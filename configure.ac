@@ -6,7 +6,7 @@ AC_INIT([tex3ds], [1.0.1], [https://github.com/devkitPro/tex3ds/issues])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([source/tex3ds.cpp])
 
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 
 # Checks for programs.
 AC_PROG_CXX
