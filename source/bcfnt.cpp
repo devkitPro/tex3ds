@@ -23,10 +23,11 @@
  */
 
 #include <cassert>
+#include "magick_compat.h"
+
 #include "bcfnt.h"
 #include "ft_error.h"
 #include "future.h"
-#include "magick_compat.h"
 #include "quantum.h"
 #include "swizzle.h"
 
@@ -60,7 +61,7 @@ void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
 
   data.reserve(data.size() + w*h/2);
 
-  Magick::Pixels cache(sheet);
+  Pixels cache(sheet);
   for(unsigned y = 0; y < h; y += 8)
   {
     for(unsigned x = 0; x < w; x += 8)
@@ -243,7 +244,7 @@ BCFNT::BCFNT(FT_Face face)
       const unsigned sheetX = (sheetIndex % GLYPHS_PER_ROW) * GLYPH_WIDTH + 1;
       const unsigned sheetY = (sheetIndex / GLYPHS_PER_ROW) * GLYPH_HEIGHT + 1;
 
-      Magick::Pixels cache(*sheet);
+      Pixels cache(*sheet);
       assert(sheetX + CELL_WIDTH < sheet->columns());
       assert(sheetY + CELL_HEIGHT < sheet->rows());
       PixelPacket p = cache.get(sheetX, sheetY, CELL_WIDTH, CELL_HEIGHT);

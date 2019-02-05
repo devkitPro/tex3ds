@@ -24,10 +24,12 @@ tex3ds_SOURCES = source/atlas.cpp \
 
 mkbcfnt_SOURCES = source/bcfnt.cpp \
                   source/ft_error.cpp \
+                  source/magick_compat.cpp \
                   source/mkbcfnt.cpp \
                   source/swizzle.cpp \
                   include/bcfnt.h \
                   include/ft_error.h \
+                  include/magick_compat.h \
                   include/swizzle.h
 
 AM_LDFLAGS = $(ImageMagick_LIBS)
