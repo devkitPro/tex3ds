@@ -123,6 +123,7 @@ private:
 
   std::size_t numSheets;
   std::uint16_t altIndex;
+  CharWidthInfo defaultWidth;
   std::uint8_t lineFeed;
   std::uint8_t height;
   std::uint8_t width;
