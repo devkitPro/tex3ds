@@ -12,10 +12,10 @@ AM_INIT_AUTOMAKE
 AC_PROG_CXX
 
 AC_LANG_PUSH([C++])
-AX_CHECK_COMPILE_FLAG([-Wall],      [CPPFLAGS+=" -Wall"])
-AX_CHECK_COMPILE_FLAG([-pthread],   [CPPFLAGS+=" -pthread" LDFLAGS+=" -pthread"])
-AX_CHECK_COMPILE_FLAG([-flto],      [CPPFLAGS+=" -flto" LDFLAGS+=" -flto"])
-AX_CHECK_COMPILE_FLAG([-pipe],      [CPPFLAGS+=" -pipe"])
+AX_CHECK_COMPILE_FLAG([-Wall],      [CPPFLAGS="$CPPFLAGS -Wall"])
+AX_CHECK_COMPILE_FLAG([-pthread],   [CPPFLAGS="$CPPFLAGS -pthread" LDFLAGS="$LDFLAGS -pthread"])
+AX_CHECK_COMPILE_FLAG([-flto],      [CPPFLAGS="$CPPFLAGS -flto" LDFLAGS="$LDFLAGS -flto"])
+AX_CHECK_COMPILE_FLAG([-pipe],      [CPPFLAGS="$CPPFLAGS -pipe"])
 AX_CXX_COMPILE_STDCXX_11(noext, mandatory)
 AC_LANG_POP()
 
