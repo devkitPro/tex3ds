@@ -77,7 +77,6 @@ public:
     return CMAP_TYPE_TABLE;
   }
 
-private:
   std::vector<std::uint16_t> table;
 };
 
@@ -89,7 +88,6 @@ public:
     return CMAP_TYPE_SCAN;
   }
 
-private:
   struct Entry
   {
     std::uint16_t code;

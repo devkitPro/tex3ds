@@ -63,9 +63,34 @@ void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
   }
 }
 
-// todo: find runs of 1-entry cmaps and consolidate into SCAN types
 void coalesceCMAP(std::vector<bcfnt::CMAP> &cmaps)
 {
+  static constexpr auto MIN_CHARS = 7;
+  std::uint16_t codeBegin = 0xFFFF;
+  std::uint16_t codeEnd = 0;
+  std::unique_ptr<bcfnt::CMAPScan> scanMap = future::make_unique<bcfnt::CMAPScan>();
+  for(auto cmap = cmaps.begin(); cmap != cmaps.end(); cmap++)
+  {
+    // cmap->codeEnd AND cmap->codeBegin are inclusive, so < 8 - 1 is 16 bytes of CMAP data, the exact size needed for a CMAPDirect.
+    // Don't get rid of CMAPs above (or at, because it takes longer to search a table) this size; that takes more space than you save
+    if(cmap->mappingMethod == bcfnt::CMAPData::CMAP_TYPE_DIRECT && cmap->codeEnd - cmap->codeBegin < MIN_CHARS - 1)
+    {
+      if(cmap->codeBegin < codeBegin)
+      {
+        codeBegin = cmap->codeBegin;
+      }
+      if(cmap->codeEnd > codeEnd)
+      {
+        codeEnd = cmap->codeEnd;
+      }
+      for(std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
+      {
+        scanMap->entries.push_back({i, i - cmap->codeBegin + dynamic_cast<bcfnt::CMAPDirect&>(*cmap->data).offset});
+      }
+      cmap = cmaps.erase(cmap) - 1;
+    }
+  }
+  cmaps.push_back({codeBegin, codeEnd, (uint16_t)bcfnt::CMAPData::CMAP_TYPE_SCAN, 0, 0, std::move(scanMap)});
 }
 
 std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const char *str)
@@ -101,6 +126,27 @@ std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, std::uint32_
   o.emplace_back((v >>  8) & 0xFF);
   o.emplace_back((v >> 16) & 0xFF);
   o.emplace_back((v >> 24) & 0xFF);
+
+  return o;
+}
+
+std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const bcfnt::CMAPScan& v)
+{
+  for(const auto &entry : v.entries)
+  {
+    o << static_cast<uint16_t>(entry.code)
+      << static_cast<uint16_t>(entry.glyphIndex);
+  }
+
+  return o;
+}
+
+std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const bcfnt::CMAPTable& v)
+{
+  for(const auto &entry : v.table)
+  {
+    o << static_cast<uint16_t>(entry);
+  }
 
   return o;
 }
@@ -145,7 +191,7 @@ BCFNT::BCFNT(FT_Face face)
       // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
       if(code >= std::numeric_limits<std::uint16_t>::max())
         continue;
-      
+
       FT_Error error = FT_Load_Glyph(face, faceIndex, FT_LOAD_RENDER);
       if(error)
       {
@@ -333,7 +379,13 @@ bool BCFNT::serialize(const std::string &path)
       break;
 
     case CMAPData::CMAP_TYPE_TABLE:
+      fileSize += dynamic_cast<const CMAPTable&>(*cmap.data).table.size() * 2;
+      break;
+
     case CMAPData::CMAP_TYPE_SCAN:
+      fileSize += dynamic_cast<const CMAPScan&>(*cmap.data).entries.size() * 4;
+      break;
+
     default:
       abort();
     }
@@ -416,8 +468,24 @@ bool BCFNT::serialize(const std::string &path)
   {
     assert(output.size() == cmapOffset);
 
-    // todo: this only handles DIRECT
-    const std::uint32_t size = 0x14 + 0x2;
+    std::uint32_t size;
+    switch (cmap.mappingMethod)
+    {
+      case bcfnt::CMAPData::CMAP_TYPE_DIRECT:
+        size = 0x14 + 0x2;
+        break;
+
+      case bcfnt::CMAPData::CMAP_TYPE_TABLE:
+        size = 0x14 + dynamic_cast<bcfnt::CMAPTable&>(*cmap.data).table.size() * 2;
+        break;
+
+      case bcfnt::CMAPData::CMAP_TYPE_SCAN:
+        size = 0x14 + dynamic_cast<bcfnt::CMAPScan&>(*cmap.data).entries.size() * 4;
+        break;
+
+      default:
+        abort();
+    }
 
     output << "CMAP"                                         // magic
            << static_cast<std::uint32_t>(size)               // section size
@@ -428,7 +496,7 @@ bool BCFNT::serialize(const std::string &path)
 
     // next CMAP offset
     if(&cmap == &cmaps.back())
-      output << static_cast<std::uint32_t>(0); 
+      output << static_cast<std::uint32_t>(0);
     else
       output << static_cast<std::uint32_t>(cmapOffset + size + 8);
 
@@ -442,11 +510,23 @@ bool BCFNT::serialize(const std::string &path)
     }
 
     case CMAPData::CMAP_TYPE_TABLE:
+    {
+      const auto &table = dynamic_cast<const CMAPTable&>(*cmap.data);
+      output << table;
+      break;
+    }
+
     case CMAPData::CMAP_TYPE_SCAN:
+    {
+      const auto &scan = dynamic_cast<const CMAPScan&>(*cmap.data);
+      output << scan;
+      break;
+    }
+
     default:
       abort();
     }
- 
+
     cmapOffset += size;
   }
 
