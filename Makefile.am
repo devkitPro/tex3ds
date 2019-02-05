@@ -32,10 +32,10 @@ mkbcfnt_SOURCES = source/bcfnt.cpp \
                   include/magick_compat.h \
                   include/swizzle.h
 
-AM_LDFLAGS = $(ImageMagick_LIBS)
+LDADD = $(ImageMagick_LIBS)
 AM_CXXFLAGS = -I$(srcdir)/include -D_GNU_SOURCE $(ImageMagick_CFLAGS)
 
-mkbcfnt_LDFLAGS = $(FreeType_LIBS) $(AM_LDFLAGS)
-mkbcfnt_CXXFLAGS = $(FreeType_CFLAGS) $(AM_CXXFLAGS)
+mkbcfnt_LDADD = $(FreeType_LIBS) $(LDADD)
+mkbcfnt_CPPFLAGS = $(FreeType_CFLAGS)
 
 EXTRA_DIST = autogen.sh
