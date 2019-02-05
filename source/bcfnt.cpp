@@ -154,7 +154,7 @@ BCFNT::BCFNT(FT_Face face)
       }
       if(face->glyph->bitmap_top > ascent)
       {
-        ascent = face->glyph->bitmap_top + 1;
+        ascent = face->glyph->bitmap_top;
       }
       else if((int)face->glyph->bitmap_top - (int)face->glyph->bitmap.rows < descent)
       {
