@@ -257,9 +257,6 @@ BCFNT::BCFNT(FT_Face face)
       cmaps.back().codeEnd = code;
   }
 
-  // convert from 26.6 fixed-point format
-  const int baseline = face->size->metrics.ascender >> 6;
-
   // extract cwdh and sheet data
   std::unique_ptr<Magick::Image> sheet;
   for(const auto &cmap: cmaps)
@@ -311,7 +308,7 @@ BCFNT::BCFNT(FT_Face face)
         for(unsigned x = 0; x < face->glyph->bitmap.width; ++x)
         {
           const int px = x;
-          const int py = y + (baseline - face->glyph->bitmap_top);
+          const int py = y + (ascent - face->glyph->bitmap_top);
 
           if(px < 0 || px >= cellWidth || py < 0 || py >= cellHeight)
             continue;
