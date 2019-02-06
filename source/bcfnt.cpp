@@ -217,8 +217,8 @@ BCFNT::BCFNT(FT_Face face)
   cellHeight = ascent - descent;
   glyphWidth     = cellWidth + 1;
   glyphHeight    = cellHeight + 1;
-  glyphsPerRow   = (SHEET_WIDTH - 1) / glyphWidth; // TODO: Figure out how to get rid of this
-  glyphsPerCol   = (SHEET_HEIGHT - 1) / glyphHeight; // TODO: Figure out how to get rid of this
+  glyphsPerRow   = SHEET_WIDTH / glyphWidth;
+  glyphsPerCol   = SHEET_HEIGHT / glyphHeight;
   glyphsPerSheet = glyphsPerRow * glyphsPerCol;
 
   if(faceMap.empty())
@@ -298,8 +298,8 @@ BCFNT::BCFNT(FT_Face face)
       assert(sheet);
 
       const unsigned sheetIndex = faceMap[code].cfntIndex % glyphsPerSheet;
-      const unsigned sheetX = (sheetIndex % glyphsPerRow) * glyphWidth + 1;
-      const unsigned sheetY = (sheetIndex / glyphsPerRow) * glyphHeight + 1;
+      const unsigned sheetX = (sheetIndex % glyphsPerRow) * this->glyphWidth + 1;
+      const unsigned sheetY = (sheetIndex / glyphsPerRow) * this->glyphHeight + 1;
 
       Pixels cache(*sheet);
       assert(sheetX + cellWidth < sheet->columns());
