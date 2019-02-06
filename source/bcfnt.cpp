@@ -80,8 +80,9 @@ void coalesceCMAP(std::vector<bcfnt::CMAP> &cmaps)
       if(cmap->codeEnd > codeEnd)
         codeEnd = cmap->codeEnd;
 
+      const auto &direct = dynamic_cast<bcfnt::CMAPDirect&>(*cmap->data);
       for(std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
-        scanMap->entries.push_back({i, i - cmap->codeBegin + dynamic_cast<bcfnt::CMAPDirect&>(*cmap->data).offset});
+        scanMap->entries.emplace_back(bcfnt::CMAPScan::Entry{i, static_cast<uint16_t>(i - cmap->codeBegin + direct.offset)});
 
       cmap = cmaps.erase(cmap);
     }
@@ -130,6 +131,7 @@ std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, std::uint32_
 
 std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const bcfnt::CMAPScan& v)
 {
+  o << static_cast<uint16_t>(v.entries.size());
   for(const auto &entry : v.entries)
   {
     o << static_cast<uint16_t>(entry.code)
@@ -215,8 +217,8 @@ BCFNT::BCFNT(FT_Face face)
   cellHeight = ascent - descent;
   glyphWidth     = cellWidth + 1;
   glyphHeight    = cellHeight + 1;
-  glyphsPerRow   = (SHEET_WIDTH - 1) / glyphWidth;
-  glyphsPerCol   = (SHEET_HEIGHT - 1) / glyphHeight;
+  glyphsPerRow   = (SHEET_WIDTH - 1) / glyphWidth; // TODO: Figure out how to get rid of this
+  glyphsPerCol   = (SHEET_HEIGHT - 1) / glyphHeight; // TODO: Figure out how to get rid of this
   glyphsPerSheet = glyphsPerRow * glyphsPerCol;
 
   if(faceMap.empty())
@@ -377,7 +379,7 @@ bool BCFNT::serialize(const std::string &path)
       break;
 
     case CMAPData::CMAP_TYPE_SCAN:
-      fileSize += dynamic_cast<const CMAPScan&>(*cmap.data).entries.size() * 4;
+      fileSize += 2 + dynamic_cast<const CMAPScan&>(*cmap.data).entries.size() * 4;
       break;
 
     default:
@@ -474,7 +476,7 @@ bool BCFNT::serialize(const std::string &path)
         break;
 
       case bcfnt::CMAPData::CMAP_TYPE_SCAN:
-        size = 0x14 + dynamic_cast<bcfnt::CMAPScan&>(*cmap.data).entries.size() * 4;
+        size = 0x14 + 2 + dynamic_cast<bcfnt::CMAPScan&>(*cmap.data).entries.size() * 4;
         break;
 
       default:
