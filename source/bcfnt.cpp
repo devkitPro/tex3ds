@@ -186,7 +186,7 @@ BCFNT::BCFNT(FT_Face face)
     // extract mappings from font face
     FT_UInt faceIndex;
     FT_ULong code = FT_Get_First_Char(face, &faceIndex);
-    while(code != 0)
+    while(faceIndex != 0)
     {
       // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
       if(code >= std::numeric_limits<std::uint16_t>::max())
