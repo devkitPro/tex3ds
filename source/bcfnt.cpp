@@ -352,7 +352,7 @@ bool BCFNT::serialize(const std::string &path)
   const std::uint32_t tglpOffset = fileSize;
   fileSize += 0x20; // TGLP header
 
-  constexpr std::uint32_t ALIGN = 0x1;//0x200;
+  constexpr std::uint32_t ALIGN = 0x80;
   constexpr std::uint32_t MASK  = ALIGN - 1;
   const std::uint32_t sheetOffset = (fileSize + MASK) & ~MASK;
   fileSize = sheetOffset + sheetData.size();
