@@ -22,7 +22,6 @@
  *  @brief mkbcfnt program entry point
  */
 #include "bcfnt.h"
-#include "ft_error.h"
 #include "future.h"
 
 #include <getopt.h>
@@ -154,45 +153,14 @@ int main (int argc, char *argv[])
 
 	std::string input_path = argv[optind];
 
-	FT_Library library;
-	FT_Error error = FT_Init_FreeType (&library);
-	if (error)
-	{
-		std::fprintf (stderr, "FT_Init_FreeType: %s\n", ft_error (error));
+	auto bcfnt = future::make_unique<bcfnt::BCFNT> ();
+
+	if (!bcfnt->addFont (input_path, size))
 		return EXIT_FAILURE;
-	}
 
-	FT_Face face;
-	error = FT_New_Face (library, input_path.c_str (), 0, &face);
-	if (error)
-	{
-		std::fprintf (stderr, "FT_New_Face: %s\n", ft_error (error));
-		FT_Done_FreeType (library);
+	if (!bcfnt->serialize (output_path))
 		return EXIT_FAILURE;
-	}
 
-	error = FT_Select_Charmap (face, FT_ENCODING_UNICODE);
-	if (error)
-	{
-		std::fprintf (stderr, "FT_Select_Charmap: %s\n", ft_error (error));
-		FT_Done_Face (face);
-		FT_Done_FreeType (library);
-		return EXIT_FAILURE;
-	}
-
-	error = FT_Set_Char_Size (face, size << 6, 0, 96, 0);
-	if (error)
-	{
-		std::fprintf (stderr, "FT_Set_Pixel_Sizes: %s\n", ft_error (error));
-		FT_Done_Face (face);
-		FT_Done_FreeType (library);
-		return EXIT_FAILURE;
-	}
-
-	auto bcfnt     = future::make_unique<bcfnt::BCFNT> (face);
-	const int code = bcfnt->serialize (output_path) ? EXIT_SUCCESS : EXIT_FAILURE;
-
-	FT_Done_Face (face);
-	FT_Done_FreeType (library);
-	return code;
+	return EXIT_SUCCESS;
+	;
 }

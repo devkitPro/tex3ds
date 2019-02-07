@@ -31,13 +31,64 @@
 #include "swizzle.h"
 
 #include <cerrno>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <limits>
 #include <map>
+#include <mutex>
+#include <queue>
+#include <thread>
 
 namespace
 {
+void doneFaces (const std::vector<FT_Face> &faces)
+{
+	for (auto &face : faces)
+	{
+		if (face)
+			FT_Done_Face (face);
+	}
+}
+
+std::vector<FT_Face> newFaces (FT_Library library, const std::string &path, const double ptSize)
+{
+	const auto numFaces = std::max (1u, std::thread::hardware_concurrency ()) + 1;
+	std::vector<FT_Face> faces (numFaces);
+
+	for (auto &face : faces)
+	{
+		FT_Error error = FT_New_Face (library, path.c_str (), 0, &face);
+		if (error)
+		{
+			std::fprintf (stderr, "FT_New_Face: %s\n", ft_error (error));
+			doneFaces (faces);
+			FT_Done_FreeType (library);
+			return {};
+		}
+
+		error = FT_Select_Charmap (face, FT_ENCODING_UNICODE);
+		if (error)
+		{
+			std::fprintf (stderr, "FT_Select_Charmap: %s\n", ft_error (error));
+			doneFaces (faces);
+			FT_Done_FreeType (library);
+			return {};
+		}
+
+		error = FT_Set_Char_Size (face, ptSize * (1 << 6), 0, 96, 0);
+		if (error)
+		{
+			std::fprintf (stderr, "FT_Set_Pixel_Sizes: %s\n", ft_error (error));
+			doneFaces (faces);
+			FT_Done_FreeType (library);
+			return {};
+		}
+	}
+
+	return faces;
+}
+
 void appendSheet (std::vector<std::uint8_t> &data, Magick::Image &sheet)
 {
 	swizzle (sheet, false);
@@ -83,7 +134,7 @@ void coalesceCMAP (std::vector<bcfnt::CMAP> &cmaps)
 			const auto &direct = dynamic_cast<bcfnt::CMAPDirect &> (*cmap->data);
 			for (std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
 				scanMap->entries.emplace_back (bcfnt::CMAPScan::Entry{
-				    i, static_cast<uint16_t> (i - cmap->codeBegin + direct.offset)});
+				    i, static_cast<std::uint16_t> (i - cmap->codeBegin + direct.offset)});
 
 			cmap = cmaps.erase (cmap);
 		}
@@ -92,10 +143,48 @@ void coalesceCMAP (std::vector<bcfnt::CMAP> &cmaps)
 	}
 	cmaps.push_back ({codeBegin,
 	    codeEnd,
-	    static_cast<uint16_t> (bcfnt::CMAPData::CMAP_TYPE_SCAN),
+	    static_cast<std::uint16_t> (bcfnt::CMAPData::CMAP_TYPE_SCAN),
 	    0,
 	    0,
 	    std::move (scanMap)});
+}
+
+Magick::Image getImage (const unsigned char *buffer, unsigned width, unsigned height)
+{
+	Magick::Image img (Magick::Geometry (width, height), transparent ());
+
+	Pixels cache (img);
+	PixelPacket p = cache.get (0, 0, width, height);
+
+	for (unsigned y = 0; y < height; ++y)
+	{
+		for (unsigned x = 0; x < width; ++x)
+		{
+			const std::uint8_t v = *buffer++;
+
+			Magick::Color c;
+			quantumRed (c, bits_to_quantum<8> (0));
+			quantumGreen (c, bits_to_quantum<8> (0));
+			quantumBlue (c, bits_to_quantum<8> (0));
+			quantumAlpha (c, bits_to_quantum<8> (v));
+
+			*p++ = c;
+		}
+	}
+
+	return img;
+}
+
+Magick::Image getImage (const FT_Bitmap &bitmap)
+{
+	return getImage (bitmap.buffer, bitmap.width, bitmap.rows);
+}
+
+template <std::size_t ALIGN, typename T>
+inline T align (T offset)
+{
+	static_assert ((ALIGN & (ALIGN - 1)) == 0, "Alignment must be a power-of-two");
+	return (offset + ALIGN - 1) & ~(ALIGN - 1);
 }
 
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const char *str)
@@ -135,23 +224,68 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint32
 	return o;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPScan &v)
+std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPDirect &v)
 {
-	o << static_cast<uint16_t> (v.entries.size ());
-	for (const auto &entry : v.entries)
-	{
-		o << static_cast<uint16_t> (entry.code) << static_cast<uint16_t> (entry.glyphIndex);
-	}
+	o.reserve (o.size () + 0x4);
+
+	o << static_cast<std::uint16_t> (v.offset);
+
+	// padding
+	o << static_cast<std::uint16_t> (0);
 
 	return o;
 }
 
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPTable &v)
 {
+	const auto size = align<0x4> (o.size () + v.table.size () * 0x2);
+	o.reserve (size);
+
 	for (const auto &entry : v.table)
+		o << static_cast<std::uint16_t> (entry);
+
+	// padding
+	if (v.table.size () % 2)
+		o << static_cast<std::uint16_t> (0);
+
+	assert (o.size () == size);
+
+	return o;
+}
+
+std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPScan &v)
+{
+	const auto size = align<0x4> (o.size () + 0x2 + v.entries.size () * 0x4);
+	o.reserve (size);
+
+	o << static_cast<std::uint16_t> (v.entries.size ());
+
+	for (const auto &entry : v.entries)
+		o << static_cast<std::uint16_t> (entry.code)
+		  << static_cast<std::uint16_t> (entry.glyphIndex);
+
+	// padding
+	o << static_cast<std::uint16_t> (0);
+
+	assert (o.size () == size);
+
+	return o;
+}
+
+std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o,
+    const std::vector<bcfnt::CharWidthInfo> &v)
+{
+	const auto size = align<0x4> (o.size () + 0x3 * v.size ());
+	o.reserve (size);
+
+	for (const auto &info : v)
 	{
-		o << static_cast<uint16_t> (entry);
+		o << static_cast<std::uint8_t> (info.left) << static_cast<std::uint8_t> (info.glyphWidth)
+		  << static_cast<std::uint8_t> (info.charWidth);
 	}
+
+	assert (align<0x4> (o.size ()) == size);
+	o.resize (size);
 
 	return o;
 }
@@ -161,50 +295,101 @@ namespace bcfnt
 {
 struct CharMap
 {
-	CharMap () : code (0), faceIndex (0), cfntIndex (0)
+	CharMap () : code (0), faceIndex (0), bitmapTop (0), cfntIndex (0)
 	{
 	}
 
-	CharMap (FT_ULong code, FT_UInt faceIndex) : code (code), faceIndex (faceIndex), cfntIndex (0)
+	CharMap (const FT_Glyph_Metrics &metrics,
+	    Magick::Image img,
+	    FT_ULong code,
+	    FT_UInt faceIndex,
+	    FT_Int bitmapTop)
+	    : metrics (metrics),
+	      img (img),
+	      code (code),
+	      faceIndex (faceIndex),
+	      bitmapTop (bitmapTop),
+	      cfntIndex (0)
 	{
 	}
 
-	const FT_ULong code;     ///< Code point.
-	const FT_UInt faceIndex; ///< FreeType face index.
-	std::uint16_t cfntIndex; ///< CFNT glyph index.
+	FT_Glyph_Metrics metrics; ///< Glyph metrics.
+	Magick::Image img;        ///< Glyph image.
+	const FT_ULong code;      ///< Code point.
+	const FT_UInt faceIndex;  ///< FreeType face index.
+	const FT_Int bitmapTop;   ///< Bitmap top.
+	std::uint16_t cfntIndex;  ///< CFNT glyph index.
 };
 
-BCFNT::BCFNT (FT_Face face)
+BCFNT::BCFNT ()
 {
-	lineFeed    = face->size->metrics.height >> 6;
-	height      = (face->bbox.yMax - face->bbox.yMin) >> 6;
-	width       = (face->bbox.xMax - face->bbox.xMin) >> 6;
-	maxWidth    = face->size->metrics.max_advance >> 6;
-	ascent      = face->size->metrics.ascender >> 6;
-	int descent = face->size->metrics.descender >> 6;
+}
+
+bool BCFNT::addFont (const std::string &path, const double ptSize)
+{
+	FT_Library library;
+	FT_Error error = FT_Init_FreeType (&library);
+	if (error)
+	{
+		std::fprintf (stderr, "FT_Init_FreeType: %s\n", ft_error (error));
+		return false;
+	}
+
+	auto faces = newFaces (library, path, ptSize);
+	if (faces.empty ())
+		return false;
+
+	lineFeed    = faces[0]->size->metrics.height >> 6;
+	height      = (faces[0]->bbox.yMax - faces[0]->bbox.yMin) >> 6;
+	width       = (faces[0]->bbox.xMax - faces[0]->bbox.xMin) >> 6;
+	maxWidth    = faces[0]->size->metrics.max_advance >> 6;
+	ascent      = faces[0]->size->metrics.ascender >> 6;
+	int descent = faces[0]->size->metrics.descender >> 6;
 
 	std::map<FT_ULong, CharMap> faceMap;
 
+	std::mutex mutex;
+	std::queue<std::pair<FT_ULong, FT_UInt>> codeQueue;
+
+	// extract mappings from font face
+	FT_UInt faceIndex;
+	FT_ULong code = FT_Get_First_Char (faces[0], &faceIndex);
+	while (faceIndex != 0)
 	{
-		// extract mappings from font face
-		FT_UInt faceIndex;
-		FT_ULong code = FT_Get_First_Char (face, &faceIndex);
-		while (faceIndex != 0)
+		// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
+		if (code >= std::numeric_limits<std::uint16_t>::max ())
 		{
-			// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
-			if (code >= std::numeric_limits<std::uint16_t>::max ())
+			code = FT_Get_Next_Char (faces[0], code, &faceIndex);
+			continue;
+		}
+
+		codeQueue.emplace (code, faceIndex);
+
+		code = FT_Get_Next_Char (faces[0], code, &faceIndex);
+	}
+
+	auto func = [&](FT_Face face) {
+		std::unique_lock<std::mutex> lock (mutex);
+
+		while (!codeQueue.empty ())
+		{
+			auto pair = codeQueue.front ();
+			codeQueue.pop ();
+			lock.unlock ();
+
+			auto code      = pair.first;
+			auto faceIndex = pair.second;
+
+			FT_Error error = FT_Load_Char (face, code, FT_LOAD_RENDER);
+			if (error)
 			{
-				code = FT_Get_Next_Char (face, code, &faceIndex);
+				std::fprintf (stderr, "FT_Load_Char: %s\n", ft_error (error));
+				lock.lock ();
 				continue;
 			}
 
-			FT_Error error = FT_Load_Glyph (face, faceIndex, FT_LOAD_RENDER);
-			if (error)
-			{
-				std::fprintf (stderr, "FT_Load_Glyph: %s\n", ft_error (error));
-				code = FT_Get_Next_Char (face, code, &faceIndex);
-				continue;
-			}
+			auto img = getImage (face->glyph->bitmap);
+			lock.lock ();
 
 			if (face->glyph->bitmap_top > ascent)
 				ascent = face->glyph->bitmap_top;
@@ -217,10 +402,33 @@ BCFNT::BCFNT (FT_Face face)
 			if (face->glyph->bitmap.width > maxWidth)
 				maxWidth = face->glyph->bitmap.width;
 
-			faceMap.emplace (code, CharMap (code, faceIndex));
-			code = FT_Get_Next_Char (face, code, &faceIndex);
+			faceMap.emplace (code, CharMap (face->glyph->metrics, img, code, faceIndex, face->glyph->bitmap_top));
 		}
+	};
+
+#if 1
+	std::vector<std::thread> threads;
+	for (auto &face : faces)
+	{
+		// reserve first face for main thread
+		if (&face == &faces[0])
+			continue;
+
+		threads.emplace_back (func, face);
 	}
+
+	std::printf ("Using %zu threads\n", threads.size ());
+
+	for (auto &thread : threads)
+		thread.join ();
+	threads.clear ();
+#elif 0
+	std::thread thread (func, faces[1]);
+	thread.join ();
+#else
+	func (faces[1]);
+#endif
+	doneFaces (faces);
 
 	cellWidth      = maxWidth + 1;
 	cellHeight     = ascent - descent;
@@ -231,7 +439,7 @@ BCFNT::BCFNT (FT_Face face)
 	glyphsPerSheet = glyphsPerRow * glyphsPerCol;
 
 	if (faceMap.empty ())
-		return;
+		return false;
 
 	{
 		// fill in CFNT index
@@ -256,6 +464,8 @@ BCFNT::BCFNT (FT_Face face)
 		const FT_ULong &code   = pair.first;
 		const CharMap &charMap = pair.second;
 
+		assert (code == charMap.code);
+
 		if (code == 0 || cmaps.empty () || cmaps.back ().codeEnd != code - 1)
 		{
 			cmaps.emplace_back ();
@@ -274,25 +484,20 @@ BCFNT::BCFNT (FT_Face face)
 	{
 		for (std::uint16_t code = cmap.codeBegin; code <= cmap.codeEnd; ++code)
 		{
-			// load glyph and render
-			FT_Error error = FT_Load_Glyph (face, faceMap[code].faceIndex, FT_LOAD_RENDER);
-			if (error)
-			{
-				std::fprintf (stderr, "FT_Load_Glyph: %s\n", ft_error (error));
-				continue;
-			}
+			CharMap &charMap          = faceMap[code];
+			FT_Glyph_Metrics &metrics = charMap.metrics;
 
 			// convert from 26.6 fixed-point format
-			const std::int8_t left        = face->glyph->metrics.horiBearingX >> 6;
-			const std::uint8_t glyphWidth = face->glyph->metrics.width >> 6;
-			const std::uint8_t charWidth  = face->glyph->metrics.horiAdvance >> 6;
+			const std::int8_t left        = metrics.horiBearingX >> 6;
+			const std::uint8_t glyphWidth = metrics.width >> 6;
+			const std::uint8_t charWidth  = metrics.horiAdvance >> 6;
 
 			// add char width info to cwdh
 			widths.emplace_back (CharWidthInfo{left, glyphWidth, charWidth});
-			if (faceMap[code].cfntIndex == altIndex)
+			if (charMap.cfntIndex == altIndex)
 				defaultWidth = CharWidthInfo{left, glyphWidth, charWidth};
 
-			if (faceMap[code].cfntIndex % glyphsPerSheet == 0)
+			if (charMap.cfntIndex % glyphsPerSheet == 0)
 			{
 				if (sheet)
 				{
@@ -306,37 +511,13 @@ BCFNT::BCFNT (FT_Face face)
 
 			assert (sheet);
 
-			const unsigned sheetIndex = faceMap[code].cfntIndex % glyphsPerSheet;
+			const unsigned sheetIndex = charMap.cfntIndex % glyphsPerSheet;
 			const unsigned sheetX     = (sheetIndex % glyphsPerRow) * this->glyphWidth + 1;
 			const unsigned sheetY     = (sheetIndex / glyphsPerRow) * this->glyphHeight + 1;
 
-			Pixels cache (*sheet);
-			assert (sheetX + cellWidth < sheet->columns ());
-			assert (sheetY + cellHeight < sheet->rows ());
-			PixelPacket p = cache.get (sheetX, sheetY, cellWidth, cellHeight);
-			for (unsigned y = 0; y < face->glyph->bitmap.rows; ++y)
-			{
-				for (unsigned x = 0; x < face->glyph->bitmap.width; ++x)
-				{
-					const int px = x;
-					const int py = y + (ascent - face->glyph->bitmap_top);
-
-					if (px < 0 || px >= cellWidth || py < 0 || py >= cellHeight)
-						continue;
-
-					const std::uint8_t v =
-					    face->glyph->bitmap.buffer[y * face->glyph->bitmap.width + x];
-
-					Magick::Color c;
-					quantumRed (c, bits_to_quantum<8> (0));
-					quantumGreen (c, bits_to_quantum<8> (0));
-					quantumBlue (c, bits_to_quantum<8> (0));
-					quantumAlpha (c, bits_to_quantum<8> (v));
-
-					p[py * cellWidth + px] = c;
-				}
-			}
-			cache.sync ();
+			sheet->composite (charMap.img,
+			    Magick::Geometry (0, 0, sheetX, sheetY + ascent - charMap.bitmapTop),
+			    Magick::OverCompositeOp);
 		}
 	}
 
@@ -346,31 +527,30 @@ BCFNT::BCFNT (FT_Face face)
 		++numSheets;
 	}
 
+	assert (widths.size () == faceMap.size ());
 	coalesceCMAP (cmaps);
+
+	return true;
 }
 
 bool BCFNT::serialize (const std::string &path)
 {
-	std::vector<std::uint8_t> output;
-
 	std::uint32_t fileSize = 0;
 	fileSize += 0x14; // CFNT header
 
-	const std::uint32_t finfOffset = fileSize;
-	fileSize += 0x20; // FINF header
+	const std::uint32_t finfOffset = align<0x4> (fileSize);
+	fileSize                       = finfOffset + 0x20; // FINF header
 
-	const std::uint32_t tglpOffset = fileSize;
-	fileSize += 0x20; // TGLP header
+	const std::uint32_t tglpOffset = align<0x4> (fileSize);
+	fileSize                       = tglpOffset + 0x20; // TGLP header
 
-	constexpr std::uint32_t ALIGN   = 0x80;
-	constexpr std::uint32_t MASK    = ALIGN - 1;
-	const std::uint32_t sheetOffset = (fileSize + MASK) & ~MASK;
+	const std::uint32_t sheetOffset = align<0x80> (fileSize);
 	fileSize                        = sheetOffset + sheetData.size ();
 
 	// CWDH headers + data
-	const std::uint32_t cwdhOffset = fileSize;
-	fileSize += 0x10;               // CWDH header
-	fileSize += 3 * widths.size (); // CWDH data
+	const std::uint32_t cwdhOffset = align<0x4> (fileSize);
+	fileSize                       = cwdhOffset + 0x10;                            // CWDH header
+	fileSize                       = align<0x4> (fileSize + 0x3 * widths.size ()); // CWDH data
 
 	// CMAP headers + data
 	std::uint32_t cmapOffset = fileSize;
@@ -381,21 +561,28 @@ bool BCFNT::serialize (const std::string &path)
 		switch (cmap.mappingMethod)
 		{
 		case CMAPData::CMAP_TYPE_DIRECT:
-			fileSize += 0x2;
+			fileSize = align<0x4> (fileSize + 0x2);
 			break;
 
 		case CMAPData::CMAP_TYPE_TABLE:
-			fileSize += dynamic_cast<const CMAPTable &> (*cmap.data).table.size () * 2;
+			fileSize = align<0x4> (
+			    fileSize + dynamic_cast<const CMAPTable &> (*cmap.data).table.size () * 0x2);
 			break;
 
 		case CMAPData::CMAP_TYPE_SCAN:
-			fileSize += 2 + dynamic_cast<const CMAPScan &> (*cmap.data).entries.size () * 4;
+			fileSize = align<0x4> (
+			    fileSize + 0x2 + dynamic_cast<const CMAPScan &> (*cmap.data).entries.size () * 0x4);
 			break;
 
 		default:
 			abort ();
 		}
 	}
+
+	assert (fileSize == align<0x4> (fileSize));
+
+	std::vector<std::uint8_t> output;
+	output.reserve (fileSize);
 
 	// FINF, TGLP, CWDH, CMAPs
 	std::uint32_t numBlocks = 3 + cmaps.size ();
@@ -463,30 +650,27 @@ bool BCFNT::serialize (const std::string &path)
 	       << static_cast<std::uint16_t> (widths.size ())            // end index
 	       << static_cast<std::uint32_t> (0);                        // next CWDH offset
 
-	for (const auto &info : widths)
-	{
-		output << static_cast<std::uint8_t> (info.left)
-		       << static_cast<std::uint8_t> (info.glyphWidth)
-		       << static_cast<std::uint8_t> (info.charWidth);
-	}
+	output << widths;
 
 	for (const auto &cmap : cmaps)
 	{
 		assert (output.size () == cmapOffset);
 
-		std::uint32_t size;
+		std::uint32_t size = 0x14;
 		switch (cmap.mappingMethod)
 		{
 		case bcfnt::CMAPData::CMAP_TYPE_DIRECT:
-			size = 0x14 + 0x2;
+			size = align<0x4> (size + 0x2);
 			break;
 
 		case bcfnt::CMAPData::CMAP_TYPE_TABLE:
-			size = 0x14 + dynamic_cast<bcfnt::CMAPTable &> (*cmap.data).table.size () * 2;
+			size = align<0x4> (
+			    size + dynamic_cast<bcfnt::CMAPTable &> (*cmap.data).table.size () * 0x2);
 			break;
 
 		case bcfnt::CMAPData::CMAP_TYPE_SCAN:
-			size = 0x14 + 2 + dynamic_cast<bcfnt::CMAPScan &> (*cmap.data).entries.size () * 4;
+			size = align<0x4> (
+			    size + 0x2 + dynamic_cast<bcfnt::CMAPScan &> (*cmap.data).entries.size () * 0x4);
 			break;
 
 		default:
@@ -509,25 +693,16 @@ bool BCFNT::serialize (const std::string &path)
 		switch (cmap.mappingMethod)
 		{
 		case CMAPData::CMAP_TYPE_DIRECT:
-		{
-			const auto &direct = dynamic_cast<const CMAPDirect &> (*cmap.data);
-			output << static_cast<std::uint16_t> (direct.offset);
+			output << dynamic_cast<const CMAPDirect &> (*cmap.data);
 			break;
-		}
 
 		case CMAPData::CMAP_TYPE_TABLE:
-		{
-			const auto &table = dynamic_cast<const CMAPTable &> (*cmap.data);
-			output << table;
+			output << dynamic_cast<const CMAPTable &> (*cmap.data);
 			break;
-		}
 
 		case CMAPData::CMAP_TYPE_SCAN:
-		{
-			const auto &scan = dynamic_cast<const CMAPScan &> (*cmap.data);
-			output << scan;
+			output << dynamic_cast<const CMAPScan &> (*cmap.data);
 			break;
-		}
 
 		default:
 			abort ();
@@ -536,7 +711,7 @@ bool BCFNT::serialize (const std::string &path)
 		cmapOffset += size;
 	}
 
-	assert (output.size () == fileSize);
+	assert (output.size () == align<0x4> (fileSize));
 
 	FILE *fp = std::fopen (path.c_str (), "wb");
 	if (!fp)

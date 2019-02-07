@@ -112,7 +112,9 @@ struct CMAP
 class BCFNT
 {
 public:
-	BCFNT (FT_Face face);
+	BCFNT ();
+
+	bool addFont (const std::string &path, double ptSize);
 
 	bool serialize (const std::string &path);
 
@@ -121,24 +123,24 @@ private:
 	std::vector<CharWidthInfo> widths;
 	std::vector<std::uint8_t> sheetData;
 
-	std::size_t numSheets;
-	std::uint16_t altIndex;
-	CharWidthInfo defaultWidth;
-	std::uint8_t lineFeed;
-	std::uint8_t height;
-	std::uint8_t width;
-	std::uint8_t maxWidth;
-	std::uint8_t ascent;
+	std::size_t numSheets  = 0;
+	std::uint16_t altIndex = 0;
+	CharWidthInfo defaultWidth{};
+	std::uint8_t lineFeed = 0;
+	std::uint8_t height   = 0;
+	std::uint8_t width    = 0;
+	std::uint8_t maxWidth = 0;
+	std::uint8_t ascent   = 0;
 
-	int cellWidth;
-	int cellHeight;
-	static constexpr int SHEET_WIDTH  = 256;
-	static constexpr int SHEET_HEIGHT = 512;
+	int cellWidth                     = 0;
+	int cellHeight                    = 0;
+	static constexpr int SHEET_WIDTH  = 1024;
+	static constexpr int SHEET_HEIGHT = 1024;
 
-	int glyphWidth;
-	int glyphHeight;
-	int glyphsPerRow;
-	int glyphsPerCol;
-	int glyphsPerSheet;
+	int glyphWidth     = 0;
+	int glyphHeight    = 0;
+	int glyphsPerRow   = 0;
+	int glyphsPerCol   = 0;
+	int glyphsPerSheet = 0;
 };
 }
