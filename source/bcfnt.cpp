@@ -190,12 +190,16 @@ BCFNT::BCFNT(FT_Face face)
     {
       // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
       if(code >= std::numeric_limits<std::uint16_t>::max())
+      {
+        code = FT_Get_Next_Char(face, code, &faceIndex);
         continue;
+      }
 
       FT_Error error = FT_Load_Glyph(face, faceIndex, FT_LOAD_RENDER);
       if(error)
       {
         std::fprintf(stderr, "FT_Load_Glyph: %s\n", ft_error(error));
+        code = FT_Get_Next_Char(face, code, &faceIndex);
         continue;
       }
 
