@@ -26,4 +26,4 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-const char* ft_error(FT_Error error);
+const char *ft_error (FT_Error error);

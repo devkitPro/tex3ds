@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -24,10 +24,11 @@
  *  for ETC1/ETC1A4 which do not involve swizzling.
  */
 #pragma once
-#include <cassert>
+
 #include "magick_compat.h"
 #include "rg_etc1.h"
 #include "subimage.h"
+
 #include <vector>
 
 /** @namespace encode
@@ -35,7 +36,6 @@
  */
 namespace encode
 {
-
 /** @brief Data buffer */
 typedef std::vector<uint8_t> Buffer;
 
@@ -44,56 +44,56 @@ typedef std::vector<uint8_t> Buffer;
  *  @param[in]  in  Data to encode
  *  @param[out] out Output buffer
  */
-template<typename T>
-inline void encode(const T &in, Buffer &out);
+template <typename T>
+inline void encode (const T &in, Buffer &out);
 
 /** @brief Encode uint8_t
  *  @param[in]  in  Data to encode
  *  @param[out] out Output buffer
  */
-template<> inline void
-encode<uint8_t>(const uint8_t &in, Buffer &out)
+template <>
+inline void encode<uint8_t> (const uint8_t &in, Buffer &out)
 {
-  out.push_back(in);
+	out.push_back (in);
 }
 
 /** @brief Encode uint16_t
  *  @param[in]  in  Data to encode
  *  @param[out] out Output buffer
  */
-template<> inline void
-encode<uint16_t>(const uint16_t &in, Buffer &out)
+template <>
+inline void encode<uint16_t> (const uint16_t &in, Buffer &out)
 {
-  out.push_back(in >> 0);
-  out.push_back(in >> 8);
+	out.push_back (in >> 0);
+	out.push_back (in >> 8);
 }
 
 /** @brief Encode uint32_t
  *  @param[in]  in  Data to encode
  *  @param[out] out Output buffer
  */
-template<> inline void
-encode<uint32_t>(const uint32_t &in, Buffer &out)
+template <>
+inline void encode<uint32_t> (const uint32_t &in, Buffer &out)
 {
-  out.push_back(in >> 0);
-  out.push_back(in >> 8);
-  out.push_back(in >> 16);
-  out.push_back(in >> 24);
+	out.push_back (in >> 0);
+	out.push_back (in >> 8);
+	out.push_back (in >> 16);
+	out.push_back (in >> 24);
 }
 
 /** @brief Encode float
  *  @param[in]  in  Data to encode
  *  @param[out] out Output buffer
  */
-template<> inline void
-encode<float>(const float &in, Buffer &out)
+template <>
+inline void encode<float> (const float &in, Buffer &out)
 {
-  constexpr uint16_t scale = 1024;
+	constexpr uint16_t scale = 1024;
 
-  assert(in >= 0);
-  assert(in <= std::numeric_limits<uint16_t>::max() / scale);
+	assert (in >= 0);
+	assert (in <= std::numeric_limits<uint16_t>::max () / scale);
 
-  encode<uint16_t>(in * scale, out);
+	encode<uint16_t> (in * scale, out);
 }
 
 /** @brief Encode sub-image
@@ -102,16 +102,15 @@ encode<float>(const float &in, Buffer &out)
  *  @param[in]  height Sub-image height (pixels)
  *  @param[out] out    Output buffer
  */
-inline void
-encode(const SubImage &sub, uint16_t width, uint16_t height, Buffer &out)
+inline void encode (const SubImage &sub, uint16_t width, uint16_t height, Buffer &out)
 {
-  encode<uint16_t>(width,  out);
-  encode<uint16_t>(height, out);
+	encode<uint16_t> (width, out);
+	encode<uint16_t> (height, out);
 
-  encode<float>(sub.left,   out);
-  encode<float>(sub.top,    out);
-  encode<float>(sub.right,  out);
-  encode<float>(sub.bottom, out);
+	encode<float> (sub.left, out);
+	encode<float> (sub.top, out);
+	encode<float> (sub.right, out);
+	encode<float> (sub.bottom, out);
 }
 
 /** @brief Work unit
@@ -122,51 +121,56 @@ encode(const SubImage &sub, uint16_t width, uint16_t height, Buffer &out)
  */
 struct WorkUnit
 {
-  Buffer                result;                ///< Work result
-  uint64_t              sequence;              ///< Work identifier
-  PixelPacket           p;                     ///< Pixel data buffer
-  size_t                stride;                ///< Pixel data stride
-  rg_etc1::etc1_quality etc1_quality;          ///< ETC1 quality option
-  bool                  output;                ///< Whether to output 3DS data
-  bool                  preview;               ///< Whether to output preview image
-  void                  (*process)(WorkUnit&); ///< Work unit processor
+	Buffer result;                      ///< Work result
+	uint64_t sequence;                  ///< Work identifier
+	PixelPacket p;                      ///< Pixel data buffer
+	size_t stride;                      ///< Pixel data stride
+	rg_etc1::etc1_quality etc1_quality; ///< ETC1 quality option
+	bool output;                        ///< Whether to output 3DS data
+	bool preview;                       ///< Whether to output preview image
+	void (*process) (WorkUnit &);       ///< Work unit processor
 
-  /** @brief Constructor
-   *  @param[in] sequence     Work identifier
-   *  @param[in] p            Pixel data buffer
-   *  @param[in] stride       Pixel data stride
-   *  @param[in] etc1_quality ETC1 quality option
-   *  @param[in] output       Whether to output 3DS data
-   *  @param[in] preview      Whether to output preview image
-   *  @param[in] process      Work unit processor
-   */
-  WorkUnit(uint64_t sequence, PixelPacket p, size_t stride,
-           rg_etc1::etc1_quality etc1_quality, bool output, bool preview,
-           void (*process)(WorkUnit&))
-  : sequence(sequence),
-    p(p),
-    stride(stride),
-    etc1_quality(etc1_quality),
-    output(output),
-    preview(preview),
-    process(process)
-  { }
+	/** @brief Constructor
+	 *  @param[in] sequence     Work identifier
+	 *  @param[in] p            Pixel data buffer
+	 *  @param[in] stride       Pixel data stride
+	 *  @param[in] etc1_quality ETC1 quality option
+	 *  @param[in] output       Whether to output 3DS data
+	 *  @param[in] preview      Whether to output preview image
+	 *  @param[in] process      Work unit processor
+	 */
+	WorkUnit (uint64_t sequence,
+	    PixelPacket p,
+	    size_t stride,
+	    rg_etc1::etc1_quality etc1_quality,
+	    bool output,
+	    bool preview,
+	    void (*process) (WorkUnit &))
+	    : sequence (sequence),
+	      p (p),
+	      stride (stride),
+	      etc1_quality (etc1_quality),
+	      output (output),
+	      preview (preview),
+	      process (process)
+	{
+	}
 
-  WorkUnit() = delete;
-  WorkUnit(const WorkUnit &other) = delete;
-  WorkUnit(WorkUnit &&other) = default;
-  WorkUnit& operator=(const WorkUnit &other) = delete;
-  WorkUnit& operator=(WorkUnit &&other) = default;
+	WorkUnit ()                      = delete;
+	WorkUnit (const WorkUnit &other) = delete;
+	WorkUnit (WorkUnit &&other)      = default;
+	WorkUnit &operator= (const WorkUnit &other) = delete;
+	WorkUnit &operator= (WorkUnit &&other) = default;
 
-  /** @brief Work unit comparator
-   *  @param[in] other Work unit to compare
-   *  @returns sequence > other.sequence
-   */
-  bool operator<(const WorkUnit &other) const
-  {
-    /* greater-than for min-heap */
-    return sequence > other.sequence;
-  }
+	/** @brief Work unit comparator
+	 *  @param[in] other Work unit to compare
+	 *  @returns sequence > other.sequence
+	 */
+	bool operator< (const WorkUnit &other) const
+	{
+		/* greater-than for min-heap */
+		return sequence > other.sequence;
+	}
 };
 
 /** @brief RGBA8888 encoder
@@ -178,7 +182,7 @@ struct WorkUnit
  *
  *  @param[in] work Work unit
  */
-void rgba8888(WorkUnit &work);
+void rgba8888 (WorkUnit &work);
 
 /** @brief RGB888 encoder
  *
@@ -188,7 +192,7 @@ void rgba8888(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void rgb888(WorkUnit &work);
+void rgb888 (WorkUnit &work);
 
 /** @brief RGB565 encoder
  *
@@ -200,7 +204,7 @@ void rgb888(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void rgb565(WorkUnit &work);
+void rgb565 (WorkUnit &work);
 
 /** @brief RGBA5551 encoder
  *
@@ -213,7 +217,7 @@ void rgb565(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void rgba5551(WorkUnit &work);
+void rgba5551 (WorkUnit &work);
 
 /** @brief RGBA4444 encoder
  *
@@ -226,7 +230,7 @@ void rgba5551(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void rgba4444(WorkUnit &work);
+void rgba4444 (WorkUnit &work);
 
 /** @brief LA88 encoder
  *
@@ -239,7 +243,7 @@ void rgba4444(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void la88(WorkUnit &work);
+void la88 (WorkUnit &work);
 
 /** @brief HILO88 encoder
  *
@@ -250,7 +254,7 @@ void la88(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void hilo88(WorkUnit &work);
+void hilo88 (WorkUnit &work);
 
 /** @brief L8 encoder
  *
@@ -261,7 +265,7 @@ void hilo88(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void l8(WorkUnit &work);
+void l8 (WorkUnit &work);
 
 /** @brief A8 encoder
  *
@@ -272,7 +276,7 @@ void l8(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void a8(WorkUnit &work);
+void a8 (WorkUnit &work);
 
 /** @brief LA44 encoder
  *
@@ -285,7 +289,7 @@ void a8(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void la44(WorkUnit &work);
+void la44 (WorkUnit &work);
 
 /** @brief L4 encoder
  *
@@ -297,7 +301,7 @@ void la44(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void l4(WorkUnit &work);
+void l4 (WorkUnit &work);
 
 /** @brief A4 encoder
  *
@@ -310,7 +314,7 @@ void l4(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void a4(WorkUnit &work);
+void a4 (WorkUnit &work);
 
 /** @brief ETC1 encoder
  *
@@ -321,7 +325,7 @@ void a4(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void etc1(WorkUnit &work);
+void etc1 (WorkUnit &work);
 
 /** @brief ETC1A4 encoder
  *
@@ -335,6 +339,6 @@ void etc1(WorkUnit &work);
  *
  *  @param[in] work Work unit
  */
-void etc1a4(WorkUnit &work);
+void etc1a4 (WorkUnit &work);
 
 }

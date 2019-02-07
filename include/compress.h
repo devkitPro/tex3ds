@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -32,7 +32,7 @@
  *  @param[in]  len    Source length
  *  @returns Compressed buffer
  */
-std::vector<uint8_t> lzssEncode(const void *src, size_t len);
+std::vector<uint8_t> lzssEncode (const void *src, size_t len);
 
 /** @brief LZSS/LZ10 decompression
  *  @param[in]  src Source buffer
@@ -40,14 +40,14 @@ std::vector<uint8_t> lzssEncode(const void *src, size_t len);
  *  @param[in]  len Source length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
-void lzssDecode(const void *src, void *dst, size_t len);
+void lzssDecode (const void *src, void *dst, size_t len);
 
 /** @brief LZ11 compression
  *  @param[in]  src    Source buffer
  *  @param[in]  len    Source length
  *  @returns Compressed buffer
  */
-std::vector<uint8_t> lz11Encode(const void *src, size_t len);
+std::vector<uint8_t> lz11Encode (const void *src, size_t len);
 
 /** @brief LZ11 decompression
  *  @param[in]  src Source buffer
@@ -55,14 +55,14 @@ std::vector<uint8_t> lz11Encode(const void *src, size_t len);
  *  @param[in]  len Source length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
-void lz11Decode(const void *src, void *dst, size_t len);
+void lz11Decode (const void *src, void *dst, size_t len);
 
 /** @brief Run-length encoding compression
  *  @param[in]  src    Source buffer
  *  @param[in]  len    Source length
  *  @returns Compressed buffer
  */
-std::vector<uint8_t> rleEncode(const void *src, size_t len);
+std::vector<uint8_t> rleEncode (const void *src, size_t len);
 
 /** @brief Run-length encoding decompression
  *  @param[in]  src Source buffer
@@ -70,14 +70,14 @@ std::vector<uint8_t> rleEncode(const void *src, size_t len);
  *  @param[in]  len Source length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
-void rleDecode(const void *src, void *dst, size_t len);
+void rleDecode (const void *src, void *dst, size_t len);
 
 /** @brief Huffman compression
  *  @param[in]  src    Source buffer
  *  @param[in]  len    Source length
  *  @returns Compressed buffer
  */
-std::vector<uint8_t> huffEncode(const void *src, size_t len);
+std::vector<uint8_t> huffEncode (const void *src, size_t len);
 
 /** @brief Huffman decompression
  *  @param[in]  src Source buffer
@@ -85,35 +85,33 @@ std::vector<uint8_t> huffEncode(const void *src, size_t len);
  *  @param[in]  len Source length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
-void huffDecode(const void *src, void *dst, size_t len);
+void huffDecode (const void *src, void *dst, size_t len);
 
 namespace
 {
-
 /** @brief Output a GBA-style compression header
  *  @param[out] header Output header
  *  @param[in]  type   Compression type
  *  @param[in]  size   Uncompressed data size
  *  @returns Size of the compression header
  */
-inline void
-compressionHeader(std::vector<uint8_t> &buffer, uint8_t type, size_t size)
+inline void compressionHeader (std::vector<uint8_t> &buffer, uint8_t type, size_t size)
 {
-  assert (!(type & 0x80));
+	assert (!(type & 0x80));
 
-  buffer.push_back(type);
-  buffer.push_back(size >>  0);
-  buffer.push_back(size >>  8);
-  buffer.push_back(size >> 16);
+	buffer.push_back (type);
+	buffer.push_back (size >> 0);
+	buffer.push_back (size >> 8);
+	buffer.push_back (size >> 16);
 
-  if(size >= 0x1000000)
-  {
-    buffer[buffer.size() - 4] |= 0x80;
-    buffer.push_back(size >> 24);
-    buffer.push_back(0); /* Reserved */
-    buffer.push_back(0); /* Reserved */
-    buffer.push_back(0); /* Reserved */
-  }
+	if (size >= 0x1000000)
+	{
+		buffer[buffer.size () - 4] |= 0x80;
+		buffer.push_back (size >> 24);
+		buffer.push_back (0); /* Reserved */
+		buffer.push_back (0); /* Reserved */
+		buffer.push_back (0); /* Reserved */
+	}
 }
 
 }

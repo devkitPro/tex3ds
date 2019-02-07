@@ -24,13 +24,17 @@
 
 #include "ft_error.h"
 
-const char* ft_error(FT_Error error)
+const char *ft_error (FT_Error error)
 {
 #undef __FTERRORS_H__
-#define FT_ERRORDEF( e, v, s )  case e: return s;
-#define FT_ERROR_START_LIST     switch (error) {
-#define FT_ERROR_END_LIST       }
+#define FT_ERRORDEF(e, v, s)                                                                       \
+	case e:                                                                                        \
+		return s;
+#define FT_ERROR_START_LIST                                                                        \
+	switch (error)                                                                                 \
+	{
+#define FT_ERROR_END_LIST }
 #include FT_ERRORS_H
 
-  return "(Unknown error)";
+	return "(Unknown error)";
 }

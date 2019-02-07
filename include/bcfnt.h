@@ -35,110 +35,110 @@ namespace bcfnt
 /** @brief Character width information. */
 struct CharWidthInfo
 {
-  std::int8_t left;        ///< Horizontal offset to draw the glyph with.
-  std::uint8_t glyphWidth; ///< Width of the glyph.
-  std::uint8_t charWidth;  ///< Width of the character, that is, horizontal distance to advance.
+	std::int8_t left;        ///< Horizontal offset to draw the glyph with.
+	std::uint8_t glyphWidth; ///< Width of the glyph.
+	std::uint8_t charWidth;  ///< Width of the character, that is, horizontal distance to advance.
 };
 
 class CMAPData
 {
 public:
-  /** @brief Font character map methods. */
-  enum Type : std::uint8_t
-  {
-    CMAP_TYPE_DIRECT = 0, ///< Identity mapping.
-    CMAP_TYPE_TABLE  = 1, ///< Mapping using a table.
-    CMAP_TYPE_SCAN   = 2, ///< Mapping using a list of mapped characters.
-  };
+	/** @brief Font character map methods. */
+	enum Type : std::uint8_t
+	{
+		CMAP_TYPE_DIRECT = 0, ///< Identity mapping.
+		CMAP_TYPE_TABLE  = 1, ///< Mapping using a table.
+		CMAP_TYPE_SCAN   = 2, ///< Mapping using a list of mapped characters.
+	};
 
-  virtual Type type () const = 0;
+	virtual Type type () const = 0;
 };
 
 class CMAPDirect : public CMAPData
 {
 public:
-  CMAPDirect (std::uint16_t offset) : offset (offset)
-  {
-  }
+	CMAPDirect (std::uint16_t offset) : offset (offset)
+	{
+	}
 
-  Type type () const override
-  {
-    return CMAP_TYPE_DIRECT;
-  }
+	Type type () const override
+	{
+		return CMAP_TYPE_DIRECT;
+	}
 
-  const std::uint16_t offset;
+	const std::uint16_t offset;
 };
 
 class CMAPTable : public CMAPData
 {
 public:
-  Type type () const override
-  {
-    return CMAP_TYPE_TABLE;
-  }
+	Type type () const override
+	{
+		return CMAP_TYPE_TABLE;
+	}
 
-  std::vector<std::uint16_t> table;
+	std::vector<std::uint16_t> table;
 };
 
 class CMAPScan : public CMAPData
 {
 public:
-  Type type () const override
-  {
-    return CMAP_TYPE_SCAN;
-  }
+	Type type () const override
+	{
+		return CMAP_TYPE_SCAN;
+	}
 
-  struct Entry
-  {
-    std::uint16_t code;
-    std::uint16_t glyphIndex;
-  };
+	struct Entry
+	{
+		std::uint16_t code;
+		std::uint16_t glyphIndex;
+	};
 
-  std::vector<Entry> entries;
+	std::vector<Entry> entries;
 };
 
 /** @brief Font character map structure. */
 struct CMAP
 {
-  std::uint16_t codeBegin;     ///< First Unicode codepoint the block applies to.
-  std::uint16_t codeEnd;       ///< Last Unicode codepoint the block applies to.
-  std::uint16_t mappingMethod; ///< Mapping method.
-  std::uint16_t reserved;
-  std::uint32_t next;          ///< Pointer to the next map.
+	std::uint16_t codeBegin;     ///< First Unicode codepoint the block applies to.
+	std::uint16_t codeEnd;       ///< Last Unicode codepoint the block applies to.
+	std::uint16_t mappingMethod; ///< Mapping method.
+	std::uint16_t reserved;
+	std::uint32_t next; ///< Pointer to the next map.
 
-  std::unique_ptr<CMAPData> data; ///< Character map data.
+	std::unique_ptr<CMAPData> data; ///< Character map data.
 };
 
 class BCFNT
 {
 public:
-  BCFNT(FT_Face face);
+	BCFNT (FT_Face face);
 
-  bool serialize(const std::string &path);
+	bool serialize (const std::string &path);
 
 private:
-  std::vector<CMAP> cmaps;
-  std::vector<CharWidthInfo> widths;
-  std::vector<std::uint8_t> sheetData;
+	std::vector<CMAP> cmaps;
+	std::vector<CharWidthInfo> widths;
+	std::vector<std::uint8_t> sheetData;
 
-  std::size_t numSheets;
-  std::uint16_t altIndex;
-  CharWidthInfo defaultWidth;
-  std::uint8_t lineFeed;
-  std::uint8_t height;
-  std::uint8_t width;
-  std::uint8_t maxWidth;
-  std::uint8_t ascent;
-  
-  int cellWidth;
-  int cellHeight;
-  static constexpr int SHEET_WIDTH  = 256;
-  static constexpr int SHEET_HEIGHT = 512;
+	std::size_t numSheets;
+	std::uint16_t altIndex;
+	CharWidthInfo defaultWidth;
+	std::uint8_t lineFeed;
+	std::uint8_t height;
+	std::uint8_t width;
+	std::uint8_t maxWidth;
+	std::uint8_t ascent;
 
-  int glyphWidth;
-  int glyphHeight;
-  int glyphsPerRow;
-  int glyphsPerCol;
-  int glyphsPerSheet;
+	int cellWidth;
+	int cellHeight;
+	static constexpr int SHEET_WIDTH  = 256;
+	static constexpr int SHEET_HEIGHT = 512;
+
+	int glyphWidth;
+	int glyphHeight;
+	int glyphsPerRow;
+	int glyphsPerCol;
+	int glyphsPerSheet;
 };
 }
