@@ -28,4 +28,4 @@
  *  @param[in] img     Image to swizzle
  *  @param[in] reverse Whether to unswizzle
  */
-void swizzle(Magick::Image &img, bool reverse);
+void swizzle (Magick::Image &img, bool reverse);

@@ -39,3 +39,6 @@ mkbcfnt_LDADD = $(FreeType_LIBS) $(LDADD)
 mkbcfnt_CPPFLAGS = $(FreeType_CFLAGS) $(AM_CPPFLAGS)
 
 EXTRA_DIST = autogen.sh
+
+format:
+	clang-format -i include/*.h source/*.cpp

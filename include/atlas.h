@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -21,23 +21,26 @@
  *  @brief Atlas interface.
  */
 #pragma once
-#include <string>
-#include <vector>
+
 #include "magick_compat.h"
 #include "subimage.h"
 
+#include <string>
+#include <vector>
+
 struct Atlas
 {
-  Magick::Image         img;
-  std::vector<SubImage> subs;
+	Magick::Image img;
+	std::vector<SubImage> subs;
 
-  Atlas()
-  { }
+	Atlas ()
+	{
+	}
 
-  Atlas(const Atlas &other) = delete;
-  Atlas(Atlas &&other) = default;
-  Atlas& operator=(const Atlas &other) = delete;
-  Atlas& operator=(Atlas &&other) = delete;
+	Atlas (const Atlas &other) = delete;
+	Atlas (Atlas &&other)      = default;
+	Atlas &operator= (const Atlas &other) = delete;
+	Atlas &operator= (Atlas &&other) = delete;
 
-  static Atlas build(const std::vector<std::string> &paths, bool trim);
+	static Atlas build (const std::vector<std::string> &paths, bool trim);
 };

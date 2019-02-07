@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -21,30 +21,38 @@
  *  @brief Sub-image structures
  */
 #pragma once
+
 #include "magick_compat.h"
+
+#include <libgen.h>
+
 #include <string>
 #include <vector>
-#include <libgen.h>
 
 struct SubImage
 {
-  size_t      index;  ///< Sorting order
-  std::string name;   ///< Sub-image name
-  float       left;   ///< Left u-coordinate
-  float       top;    ///< Top v-coordinate
-  float       right;  ///< Right u-coordinate
-  float       bottom; ///< Bottom v-coordinate
+	size_t index;     ///< Sorting order
+	std::string name; ///< Sub-image name
+	float left;       ///< Left u-coordinate
+	float top;        ///< Top v-coordinate
+	float right;      ///< Right u-coordinate
+	float bottom;     ///< Bottom v-coordinate
 
-  SubImage(size_t index, const std::string &name, float left, float top, float right, float bottom)
-  : index(index), left(left), top(top), right(right), bottom(bottom)
-  {
-    std::vector<char> path(name.begin(), name.end());
-    path.push_back(0);
-    this->name = ::basename(path.data());
-  }
+	SubImage (size_t index,
+	    const std::string &name,
+	    float left,
+	    float top,
+	    float right,
+	    float bottom)
+	    : index (index), left (left), top (top), right (right), bottom (bottom)
+	{
+		std::vector<char> path (name.begin (), name.end ());
+		path.push_back (0);
+		this->name = ::basename (path.data ());
+	}
 
-  bool operator<(const SubImage &rhs) const
-  {
-    return index < rhs.index;
-  }
+	bool operator< (const SubImage &rhs) const
+	{
+		return index < rhs.index;
+	}
 };

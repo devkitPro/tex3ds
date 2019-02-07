@@ -1,3 +1,4 @@
+/* clang-format off */
 // File: rg_etc1.h - Fast, high quality ETC1 block packer/unpacker - Rich Geldreich <richgel99@gmail.com>
 // Please see ZLIB license at the end of this file.
 #pragma once
@@ -74,3 +75,4 @@ namespace rg_etc1
 // 3. This notice may not be removed or altered from any source distribution.
 //
 //------------------------------------------------------------------------------
+/* clang-format on */
