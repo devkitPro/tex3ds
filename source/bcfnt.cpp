@@ -39,19 +39,6 @@
 
 namespace
 {
-/* todo: make configurable */
-constexpr auto CELL_WIDTH   = 24;
-constexpr auto CELL_HEIGHT  = 30;
-constexpr auto SHEET_WIDTH  = 256;
-constexpr auto SHEET_HEIGHT = 512;
-
-/* DO NOT EDIT */
-constexpr auto GLYPH_WIDTH      = CELL_WIDTH + 1;
-constexpr auto GLYPH_HEIGHT     = CELL_HEIGHT + 1;
-constexpr auto GLYPHS_PER_ROW   = SHEET_WIDTH / GLYPH_WIDTH;
-constexpr auto GLYPHS_PER_COL   = SHEET_HEIGHT / GLYPH_HEIGHT;
-constexpr auto GLYPHS_PER_SHEET = GLYPHS_PER_ROW * GLYPHS_PER_COL;
-
 void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
 {
   swizzle(sheet, false);
@@ -76,9 +63,33 @@ void appendSheet(std::vector<std::uint8_t> &data, Magick::Image &sheet)
   }
 }
 
-// todo: find runs of 1-entry cmaps and consolidate into SCAN types
 void coalesceCMAP(std::vector<bcfnt::CMAP> &cmaps)
 {
+  static constexpr auto MIN_CHARS = 7;
+  std::uint16_t codeBegin = 0xFFFF;
+  std::uint16_t codeEnd = 0;
+  std::unique_ptr<bcfnt::CMAPScan> scanMap = future::make_unique<bcfnt::CMAPScan>();
+  auto cmap = cmaps.begin();
+  while (cmap != cmaps.end())
+  {
+    if (cmap->mappingMethod == bcfnt::CMAPData::CMAP_TYPE_DIRECT && cmap->codeEnd - cmap->codeBegin < MIN_CHARS - 1)
+    {
+      if(cmap->codeBegin < codeBegin)
+        codeBegin = cmap->codeBegin;
+
+      if(cmap->codeEnd > codeEnd)
+        codeEnd = cmap->codeEnd;
+
+      const auto &direct = dynamic_cast<bcfnt::CMAPDirect&>(*cmap->data);
+      for(std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
+        scanMap->entries.emplace_back(bcfnt::CMAPScan::Entry{i, static_cast<uint16_t>(i - cmap->codeBegin + direct.offset)});
+
+      cmap = cmaps.erase(cmap);
+    }
+    else
+      ++cmap;
+  }
+  cmaps.push_back({codeBegin, codeEnd, static_cast<uint16_t>(bcfnt::CMAPData::CMAP_TYPE_SCAN), 0, 0, std::move(scanMap)});
 }
 
 std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const char *str)
@@ -117,6 +128,28 @@ std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, std::uint32_
 
   return o;
 }
+
+std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const bcfnt::CMAPScan& v)
+{
+  o << static_cast<uint16_t>(v.entries.size());
+  for(const auto &entry : v.entries)
+  {
+    o << static_cast<uint16_t>(entry.code)
+      << static_cast<uint16_t>(entry.glyphIndex);
+  }
+
+  return o;
+}
+
+std::vector<std::uint8_t>& operator<<(std::vector<std::uint8_t> &o, const bcfnt::CMAPTable& v)
+{
+  for(const auto &entry : v.table)
+  {
+    o << static_cast<uint16_t>(entry);
+  }
+
+  return o;
+}
 }
 
 namespace bcfnt
@@ -145,6 +178,7 @@ BCFNT::BCFNT(FT_Face face)
   width = (face->bbox.xMax - face->bbox.xMin) >> 6;
   maxWidth = face->size->metrics.max_advance >> 6;
   ascent = face->size->metrics.ascender >> 6;
+  int descent = face->size->metrics.descender >> 6;
 
   std::map<FT_ULong, CharMap> faceMap;
 
@@ -152,16 +186,44 @@ BCFNT::BCFNT(FT_Face face)
     // extract mappings from font face
     FT_UInt faceIndex;
     FT_ULong code = FT_Get_First_Char(face, &faceIndex);
-    while(code != 0)
+    while(faceIndex != 0)
     {
       // only supports 16-bit code points; also 0xFFFF is explicitly a non-character
       if(code >= std::numeric_limits<std::uint16_t>::max())
+      {
+        code = FT_Get_Next_Char(face, code, &faceIndex);
         continue;
+      }
+
+      FT_Error error = FT_Load_Glyph(face, faceIndex, FT_LOAD_RENDER);
+      if(error)
+      {
+        std::fprintf(stderr, "FT_Load_Glyph: %s\n", ft_error(error));
+        code = FT_Get_Next_Char(face, code, &faceIndex);
+        continue;
+      }
+
+      if(face->glyph->bitmap_top > ascent)
+        ascent = face->glyph->bitmap_top;
+
+      if(static_cast<int>(face->glyph->bitmap_top) - static_cast<int>(face->glyph->bitmap.rows) < descent)
+        descent = face->glyph->bitmap_top - face->glyph->bitmap.rows;
+
+      if(face->glyph->bitmap.width > maxWidth)
+        maxWidth = face->glyph->bitmap.width;
 
       faceMap.emplace(code, CharMap(code, faceIndex));
       code = FT_Get_Next_Char(face, code, &faceIndex);
     }
   }
+
+  cellWidth = maxWidth + 1;
+  cellHeight = ascent - descent;
+  glyphWidth     = cellWidth + 1;
+  glyphHeight    = cellHeight + 1;
+  glyphsPerRow   = SHEET_WIDTH / glyphWidth;
+  glyphsPerCol   = SHEET_HEIGHT / glyphHeight;
+  glyphsPerSheet = glyphsPerRow * glyphsPerCol;
 
   if(faceMap.empty())
     return;
@@ -201,9 +263,6 @@ BCFNT::BCFNT(FT_Face face)
       cmaps.back().codeEnd = code;
   }
 
-  // convert from 26.6 fixed-point format
-  const int baseline = face->size->metrics.ascender >> 6;
-
   // extract cwdh and sheet data
   std::unique_ptr<Magick::Image> sheet;
   for(const auto &cmap: cmaps)
@@ -219,14 +278,16 @@ BCFNT::BCFNT(FT_Face face)
       }
 
       // convert from 26.6 fixed-point format
-      const std::int8_t  left       = face->glyph->metrics.horiBearingX >> 6;;
+      const std::int8_t  left       = face->glyph->metrics.horiBearingX >> 6;
       const std::uint8_t glyphWidth = face->glyph->metrics.width >> 6;
       const std::uint8_t charWidth  = face->glyph->metrics.horiAdvance >> 6;
 
       // add char width info to cwdh
       widths.emplace_back(CharWidthInfo{left, glyphWidth, charWidth});
+      if (faceMap[code].cfntIndex == altIndex)
+        defaultWidth = CharWidthInfo{left, glyphWidth, charWidth};
 
-      if(faceMap[code].cfntIndex % GLYPHS_PER_SHEET == 0)
+      if(faceMap[code].cfntIndex % glyphsPerSheet == 0)
       {
         if(sheet)
         {
@@ -240,22 +301,22 @@ BCFNT::BCFNT(FT_Face face)
 
       assert(sheet);
 
-      const unsigned sheetIndex = faceMap[code].cfntIndex % GLYPHS_PER_SHEET;
-      const unsigned sheetX = (sheetIndex % GLYPHS_PER_ROW) * GLYPH_WIDTH + 1;
-      const unsigned sheetY = (sheetIndex / GLYPHS_PER_ROW) * GLYPH_HEIGHT + 1;
+      const unsigned sheetIndex = faceMap[code].cfntIndex % glyphsPerSheet;
+      const unsigned sheetX = (sheetIndex % glyphsPerRow) * this->glyphWidth + 1;
+      const unsigned sheetY = (sheetIndex / glyphsPerRow) * this->glyphHeight + 1;
 
       Pixels cache(*sheet);
-      assert(sheetX + CELL_WIDTH < sheet->columns());
-      assert(sheetY + CELL_HEIGHT < sheet->rows());
-      PixelPacket p = cache.get(sheetX, sheetY, CELL_WIDTH, CELL_HEIGHT);
+      assert(sheetX + cellWidth < sheet->columns());
+      assert(sheetY + cellHeight < sheet->rows());
+      PixelPacket p = cache.get(sheetX, sheetY, cellWidth, cellHeight);
       for(unsigned y = 0; y < face->glyph->bitmap.rows; ++y)
       {
         for(unsigned x = 0; x < face->glyph->bitmap.width; ++x)
         {
           const int px = x;
-          const int py = y + (baseline - face->glyph->bitmap_top);
+          const int py = y + (ascent - face->glyph->bitmap_top);
 
-          if(px < 0 || px >= CELL_WIDTH || py < 0 || py >= CELL_HEIGHT)
+          if(px < 0 || px >= cellWidth || py < 0 || py >= cellHeight)
             continue;
 
           const std::uint8_t v = face->glyph->bitmap.buffer[y * face->glyph->bitmap.width + x];
@@ -266,7 +327,7 @@ BCFNT::BCFNT(FT_Face face)
           quantumBlue(c,  bits_to_quantum<8>(0));
           quantumAlpha(c, bits_to_quantum<8>(v));
 
-          p[py*CELL_WIDTH + px] = c;
+          p[py*cellWidth + px] = c;
         }
       }
       cache.sync();
@@ -295,7 +356,7 @@ bool BCFNT::serialize(const std::string &path)
   const std::uint32_t tglpOffset = fileSize;
   fileSize += 0x20; // TGLP header
 
-  constexpr std::uint32_t ALIGN = 0x1;//0x200;
+  constexpr std::uint32_t ALIGN = 0x80;
   constexpr std::uint32_t MASK  = ALIGN - 1;
   const std::uint32_t sheetOffset = (fileSize + MASK) & ~MASK;
   fileSize = sheetOffset + sheetData.size();
@@ -318,7 +379,13 @@ bool BCFNT::serialize(const std::string &path)
       break;
 
     case CMAPData::CMAP_TYPE_TABLE:
+      fileSize += dynamic_cast<const CMAPTable&>(*cmap.data).table.size() * 2;
+      break;
+
     case CMAPData::CMAP_TYPE_SCAN:
+      fileSize += 2 + dynamic_cast<const CMAPScan&>(*cmap.data).entries.size() * 4;
+      break;
+
     default:
       abort();
     }
@@ -345,9 +412,9 @@ bool BCFNT::serialize(const std::string &path)
          << static_cast<std::uint8_t>(0x1)           // font type
          << static_cast<std::uint8_t>(lineFeed)      // line feed
          << static_cast<std::uint16_t>(altIndex)     // alternate char index
-         << static_cast<std::uint8_t>(0x0)           // default width (left)
-         << static_cast<std::uint8_t>(0x1)           // default width (glyph width)
-         << static_cast<std::uint8_t>(0x1)           // default width (char width)
+         << static_cast<std::uint8_t>(defaultWidth.left)           // default width (left)
+         << static_cast<std::uint8_t>(defaultWidth.glyphWidth)           // default width (glyph width)
+         << static_cast<std::uint8_t>(defaultWidth.charWidth)           // default width (char width)
          << static_cast<std::uint8_t>(0x1)           // encoding
          << static_cast<std::uint32_t>(tglpOffset+8) // TGLP offset
          << static_cast<std::uint32_t>(cwdhOffset+8) // CWDH offset
@@ -362,15 +429,15 @@ bool BCFNT::serialize(const std::string &path)
   assert(output.size() == tglpOffset);
   output << "TGLP"                                     // magic
          << static_cast<std::uint32_t>(0x20)           // section size
-         << static_cast<std::uint8_t>(CELL_WIDTH)      // cell width
-         << static_cast<std::uint8_t>(CELL_HEIGHT)     // cell height
+         << static_cast<std::uint8_t>(cellWidth)      // cell width
+         << static_cast<std::uint8_t>(cellHeight)     // cell height
          << static_cast<std::uint8_t>(ascent)          // cell baseline
          << static_cast<std::uint8_t>(maxWidth)        // max character width
          << static_cast<std::uint32_t>(sheetSize)      // sheet data size
          << static_cast<std::uint16_t>(numSheets)      // number of sheets
          << static_cast<std::uint16_t>(0xB)            // 4-bit alpha format
-         << static_cast<std::uint16_t>(GLYPHS_PER_ROW) // num columns
-         << static_cast<std::uint16_t>(GLYPHS_PER_COL) // num rows
+         << static_cast<std::uint16_t>(glyphsPerRow) // num columns
+         << static_cast<std::uint16_t>(glyphsPerCol) // num rows
          << static_cast<std::uint16_t>(SHEET_WIDTH)    // sheet width
          << static_cast<std::uint16_t>(SHEET_HEIGHT)   // sheet height
          << static_cast<std::uint32_t>(sheetOffset);   // sheet data offset
@@ -401,8 +468,24 @@ bool BCFNT::serialize(const std::string &path)
   {
     assert(output.size() == cmapOffset);
 
-    // todo: this only handles DIRECT
-    const std::uint32_t size = 0x14 + 0x2;
+    std::uint32_t size;
+    switch (cmap.mappingMethod)
+    {
+      case bcfnt::CMAPData::CMAP_TYPE_DIRECT:
+        size = 0x14 + 0x2;
+        break;
+
+      case bcfnt::CMAPData::CMAP_TYPE_TABLE:
+        size = 0x14 + dynamic_cast<bcfnt::CMAPTable&>(*cmap.data).table.size() * 2;
+        break;
+
+      case bcfnt::CMAPData::CMAP_TYPE_SCAN:
+        size = 0x14 + 2 + dynamic_cast<bcfnt::CMAPScan&>(*cmap.data).entries.size() * 4;
+        break;
+
+      default:
+        abort();
+    }
 
     output << "CMAP"                                         // magic
            << static_cast<std::uint32_t>(size)               // section size
@@ -413,7 +496,7 @@ bool BCFNT::serialize(const std::string &path)
 
     // next CMAP offset
     if(&cmap == &cmaps.back())
-      output << static_cast<std::uint32_t>(0); 
+      output << static_cast<std::uint32_t>(0);
     else
       output << static_cast<std::uint32_t>(cmapOffset + size + 8);
 
@@ -427,11 +510,23 @@ bool BCFNT::serialize(const std::string &path)
     }
 
     case CMAPData::CMAP_TYPE_TABLE:
+    {
+      const auto &table = dynamic_cast<const CMAPTable&>(*cmap.data);
+      output << table;
+      break;
+    }
+
     case CMAPData::CMAP_TYPE_SCAN:
+    {
+      const auto &scan = dynamic_cast<const CMAPScan&>(*cmap.data);
+      output << scan;
+      break;
+    }
+
     default:
       abort();
     }
- 
+
     cmapOffset += size;
   }
 

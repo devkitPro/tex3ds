@@ -77,7 +77,6 @@ public:
     return CMAP_TYPE_TABLE;
   }
 
-private:
   std::vector<std::uint16_t> table;
 };
 
@@ -89,7 +88,6 @@ public:
     return CMAP_TYPE_SCAN;
   }
 
-private:
   struct Entry
   {
     std::uint16_t code;
@@ -125,10 +123,22 @@ private:
 
   std::size_t numSheets;
   std::uint16_t altIndex;
+  CharWidthInfo defaultWidth;
   std::uint8_t lineFeed;
   std::uint8_t height;
   std::uint8_t width;
   std::uint8_t maxWidth;
   std::uint8_t ascent;
+  
+  int cellWidth;
+  int cellHeight;
+  static constexpr int SHEET_WIDTH  = 256;
+  static constexpr int SHEET_HEIGHT = 512;
+
+  int glyphWidth;
+  int glyphHeight;
+  int glyphsPerRow;
+  int glyphsPerCol;
+  int glyphsPerSheet;
 };
 }

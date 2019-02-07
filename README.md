@@ -1,4 +1,4 @@
-# tex3ds
+# tex3ds & [mkbcfnt](#mkbcfnt)
 
 **3DS Texture Conversion**
 
@@ -162,4 +162,18 @@ Usage: ./tex3ds [OPTIONS...] <input>
     +----+----+----+----+
     |    | -Y |         |
     +----+----+---------+
+```
+
+# mkbcfnt
+
+**3DS Font Conversion**
+
+```
+Usage: ./mkbcfnt [OPTIONS...] <input>
+  Options:
+    -h, --help                   Show this help message
+    -o, --output <output>        Output file
+    -s, --size <size>            Set font size in points
+    -v, --version                Show version and copyright information
+    <input>                      Input file
 ```
