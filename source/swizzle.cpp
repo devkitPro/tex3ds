@@ -30,55 +30,116 @@ namespace
  *  @param[in] p       Tile to swizzle
  *  @param[in] reverse Whether to unswizzle
  */
-void swizzle(PixelPacket p, bool reverse)
+void swizzle (PixelPacket p, bool reverse)
 {
-  // swizzle foursome table
-  static const unsigned char table[][4] =
-  {
-    {  2,  8, 16,  4, },
-    {  3,  9, 17,  5, },
-    {  6, 10, 24, 20, },
-    {  7, 11, 25, 21, },
-    { 14, 26, 28, 22, },
-    { 15, 27, 29, 23, },
-    { 34, 40, 48, 36, },
-    { 35, 41, 49, 37, },
-    { 38, 42, 56, 52, },
-    { 39, 43, 57, 53, },
-    { 46, 58, 60, 54, },
-    { 47, 59, 61, 55, },
-  };
+	// swizzle foursome table
+	static const unsigned char table[][4] = {
+	    /* clange-format off */
+	    {
+	        2,
+	        8,
+	        16,
+	        4,
+	    },
+	    {
+	        3,
+	        9,
+	        17,
+	        5,
+	    },
+	    {
+	        6,
+	        10,
+	        24,
+	        20,
+	    },
+	    {
+	        7,
+	        11,
+	        25,
+	        21,
+	    },
+	    {
+	        14,
+	        26,
+	        28,
+	        22,
+	    },
+	    {
+	        15,
+	        27,
+	        29,
+	        23,
+	    },
+	    {
+	        34,
+	        40,
+	        48,
+	        36,
+	    },
+	    {
+	        35,
+	        41,
+	        49,
+	        37,
+	    },
+	    {
+	        38,
+	        42,
+	        56,
+	        52,
+	    },
+	    {
+	        39,
+	        43,
+	        57,
+	        53,
+	    },
+	    {
+	        46,
+	        58,
+	        60,
+	        54,
+	    },
+	    {
+	        47,
+	        59,
+	        61,
+	        55,
+	    },
+	    /* clange-format on */
+	};
 
-  if(!reverse)
-  {
-    // swizzle each foursome
-    for(const auto &entry: table)
-    {
-      Magick::Color tmp = p[entry[0]];
-      p[entry[0]]       = p[entry[1]];
-      p[entry[1]]       = p[entry[2]];
-      p[entry[2]]       = p[entry[3]];
-      p[entry[3]]       = tmp;
-    }
-  }
-  else
-  {
-    // unswizzle each foursome
-    for(const auto &entry: table)
-    {
-      Magick::Color tmp = p[entry[3]];
-      p[entry[3]]       = p[entry[2]];
-      p[entry[2]]       = p[entry[1]];
-      p[entry[1]]       = p[entry[0]];
-      p[entry[0]]       = tmp;
-    }
-  }
+	if (!reverse)
+	{
+		// swizzle each foursome
+		for (const auto &entry : table)
+		{
+			Magick::Color tmp = p[entry[0]];
+			p[entry[0]]       = p[entry[1]];
+			p[entry[1]]       = p[entry[2]];
+			p[entry[2]]       = p[entry[3]];
+			p[entry[3]]       = tmp;
+		}
+	}
+	else
+	{
+		// unswizzle each foursome
+		for (const auto &entry : table)
+		{
+			Magick::Color tmp = p[entry[3]];
+			p[entry[3]]       = p[entry[2]];
+			p[entry[2]]       = p[entry[1]];
+			p[entry[1]]       = p[entry[0]];
+			p[entry[0]]       = tmp;
+		}
+	}
 
-  // (un)swizzle each pair
-  swapPixel(p[12], p[18]);
-  swapPixel(p[13], p[19]);
-  swapPixel(p[44], p[50]);
-  swapPixel(p[45], p[51]);
+	// (un)swizzle each pair
+	swapPixel (p[12], p[18]);
+	swapPixel (p[13], p[19]);
+	swapPixel (p[44], p[50]);
+	swapPixel (p[45], p[51]);
 }
 }
 
@@ -86,20 +147,20 @@ void swizzle(PixelPacket p, bool reverse)
  *  @param[in] img     Image to swizzle
  *  @param[in] reverse Whether to unswizzle
  */
-void swizzle(Magick::Image &img, bool reverse)
+void swizzle (Magick::Image &img, bool reverse)
 {
-  Pixels cache(img);
-  size_t height = img.rows();
-  size_t width  = img.columns();
+	Pixels cache (img);
+	size_t height = img.rows ();
+	size_t width  = img.columns ();
 
-  // (un)swizzle each tile
-  for(size_t j = 0; j < height; j += 8)
-  {
-    for(size_t i = 0; i < width; i += 8)
-    {
-      PixelPacket p = cache.get(i, j, 8, 8);
-      swizzle(p, reverse);
-      cache.sync();
-    }
-  }
+	// (un)swizzle each tile
+	for (size_t j = 0; j < height; j += 8)
+	{
+		for (size_t i = 0; i < width; i += 8)
+		{
+			PixelPacket p = cache.get (i, j, 8, 8);
+			swizzle (p, reverse);
+			cache.sync ();
+		}
+	}
 }

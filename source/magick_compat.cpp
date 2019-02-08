@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017
+ * Copyright (c) 2017-2019
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -20,171 +20,169 @@
 /** @file magick_compat.cpp
  *  @brief ImageMagick compatibility routines
  */
-#include <cassert>
+
 #include "magick_compat.h"
 
 #if MagickLibVersion >= 0x700
 /*------------------------------------------------------------------------------
  * PixelPacket::Reference
  *----------------------------------------------------------------------------*/
-PixelPacket::Reference::Reference(const Pixels *cache, Magick::Quantum *pixel)
-: cache(cache),
-  pixel(pixel)
-{ }
-
-PixelPacket::Reference& PixelPacket::Reference::operator=(const PixelPacket::Reference &other)
+PixelPacket::Reference::Reference (const Pixels *cache, Magick::Quantum *pixel)
+    : cache (cache), pixel (pixel)
 {
-  if(&other != this)
-  {
-    // copy pixel data
-    pixel[cache->red]   = other.pixel[other.cache->red];
-    pixel[cache->green] = other.pixel[other.cache->green];
-    pixel[cache->blue]  = other.pixel[other.cache->blue];
-
-    if(cache->alpha >= 0)
-    {
-      using Magick::Quantum;
-      if(other.cache->alpha >= 0)
-        pixel[cache->alpha] = other.pixel[other.cache->alpha];
-      else
-        pixel[cache->alpha] = QuantumRange;
-    }
-  }
-
-  return *this;
 }
 
-PixelPacket::Reference& PixelPacket::Reference::operator=(PixelPacket::Reference &&other)
+PixelPacket::Reference &PixelPacket::Reference::operator= (const PixelPacket::Reference &other)
 {
-  // copy pixel data
-  pixel[cache->red]   = other.pixel[other.cache->red];
-  pixel[cache->green] = other.pixel[other.cache->green];
-  pixel[cache->blue]  = other.pixel[other.cache->blue];
+	if (&other != this)
+	{
+		// copy pixel data
+		pixel[cache->red]   = other.pixel[other.cache->red];
+		pixel[cache->green] = other.pixel[other.cache->green];
+		pixel[cache->blue]  = other.pixel[other.cache->blue];
 
-  if(cache->alpha >= 0)
-  {
-    using Magick::Quantum;
-    if(other.cache->alpha >= 0)
-      pixel[cache->alpha] = other.pixel[other.cache->alpha];
-    else
-      pixel[cache->alpha] = QuantumRange;
-  }
+		if (cache->alpha >= 0)
+		{
+			using Magick::Quantum;
+			if (other.cache->alpha >= 0)
+				pixel[cache->alpha] = other.pixel[other.cache->alpha];
+			else
+				pixel[cache->alpha] = QuantumRange;
+		}
+	}
 
-  return *this;
+	return *this;
 }
 
-PixelPacket::Reference& PixelPacket::Reference::operator=(const Magick::Color &c)
+PixelPacket::Reference &PixelPacket::Reference::operator= (PixelPacket::Reference &&other)
 {
-  // copy color to pixel
-  pixel[cache->red]   = quantumRed(c);
-  pixel[cache->green] = quantumGreen(c);
-  pixel[cache->blue]  = quantumBlue(c);
+	// copy pixel data
+	pixel[cache->red]   = other.pixel[other.cache->red];
+	pixel[cache->green] = other.pixel[other.cache->green];
+	pixel[cache->blue]  = other.pixel[other.cache->blue];
 
-  if(cache->alpha >= 0)
-    pixel[cache->alpha] = quantumAlpha(c);
+	if (cache->alpha >= 0)
+	{
+		using Magick::Quantum;
+		if (other.cache->alpha >= 0)
+			pixel[cache->alpha] = other.pixel[other.cache->alpha];
+		else
+			pixel[cache->alpha] = QuantumRange;
+	}
 
-  return *this;
+	return *this;
 }
 
-PixelPacket::Reference::operator Magick::Color() const
+PixelPacket::Reference &PixelPacket::Reference::operator= (const Magick::Color &c)
 {
-  // extract color from pixel
-  using Magick::Quantum;
-  return Magick::Color(pixel[cache->red],
-                       pixel[cache->green],
-                       pixel[cache->blue],
-                       cache->alpha >= 0 ? pixel[cache->alpha] : QuantumRange);
+	// copy color to pixel
+	pixel[cache->red]   = quantumRed (c);
+	pixel[cache->green] = quantumGreen (c);
+	pixel[cache->blue]  = quantumBlue (c);
+
+	if (cache->alpha >= 0)
+		pixel[cache->alpha] = quantumAlpha (c);
+
+	return *this;
+}
+
+PixelPacket::Reference::operator Magick::Color () const
+{
+	// extract color from pixel
+	using Magick::Quantum;
+	return Magick::Color (pixel[cache->red],
+	    pixel[cache->green],
+	    pixel[cache->blue],
+	    cache->alpha >= 0 ? pixel[cache->alpha] : QuantumRange);
 }
 
 /*------------------------------------------------------------------------------
  * PixelPacket
  *----------------------------------------------------------------------------*/
-PixelPacket::PixelPacket(const Pixels *cache, Magick::Quantum *pixels)
-: cache(cache),
-  pixels(pixels)
-{ }
-
-PixelPacket::PixelPacket(const PixelPacket &other)
-: cache(other.cache),
-  pixels(other.pixels)
-{ }
-
-PixelPacket::PixelPacket(PixelPacket &&other)
-: cache(other.cache),
-  pixels(other.pixels)
-{ }
-
-PixelPacket& PixelPacket::operator=(const PixelPacket &other)
+PixelPacket::PixelPacket (const Pixels *cache, Magick::Quantum *pixels)
+    : cache (cache), pixels (pixels)
 {
-  if(&other != this)
-  {
-    cache  = other.cache;
-    pixels = other.pixels;
-  }
-
-  return *this;
 }
 
-PixelPacket& PixelPacket::operator=(PixelPacket &&other)
+PixelPacket::PixelPacket (const PixelPacket &other) : cache (other.cache), pixels (other.pixels)
 {
-  cache  = other.cache;
-  pixels = other.pixels;
-
-  return *this;
 }
 
-PixelPacket::Reference PixelPacket::operator[](size_t index) const
+PixelPacket::PixelPacket (PixelPacket &&other) : cache (other.cache), pixels (other.pixels)
 {
-  return PixelPacket::Reference(cache, pixels + (index * cache->stride));
 }
 
-PixelPacket::Reference PixelPacket::operator*() const
+PixelPacket &PixelPacket::operator= (const PixelPacket &other)
 {
-  return PixelPacket::Reference(cache, pixels);
+	if (&other != this)
+	{
+		cache  = other.cache;
+		pixels = other.pixels;
+	}
+
+	return *this;
 }
 
-PixelPacket PixelPacket::operator+(size_t i)
+PixelPacket &PixelPacket::operator= (PixelPacket &&other)
 {
-  return PixelPacket(cache, pixels + (i * cache->stride));
+	cache  = other.cache;
+	pixels = other.pixels;
+
+	return *this;
 }
 
-PixelPacket& PixelPacket::operator++()
+PixelPacket::Reference PixelPacket::operator[] (size_t index) const
 {
-  pixels += cache->stride;
-  return *this;
+	return PixelPacket::Reference (cache, pixels + (index * cache->stride));
 }
 
-PixelPacket PixelPacket::operator++(int)
+PixelPacket::Reference PixelPacket::operator* () const
 {
-  PixelPacket tmp(*this);
-  pixels += cache->stride;
-  return tmp;
+	return PixelPacket::Reference (cache, pixels);
+}
+
+PixelPacket PixelPacket::operator+ (size_t i)
+{
+	return PixelPacket (cache, pixels + (i * cache->stride));
+}
+
+PixelPacket &PixelPacket::operator++ ()
+{
+	pixels += cache->stride;
+	return *this;
+}
+
+PixelPacket PixelPacket::operator++ (int)
+{
+	PixelPacket tmp (*this);
+	pixels += cache->stride;
+	return tmp;
 }
 
 /*------------------------------------------------------------------------------
  * Pixels
  *----------------------------------------------------------------------------*/
-Pixels::Pixels(Magick::Image &img)
-: img(img),
-  cache(img),
-  red(cache.offset(Magick::RedPixelChannel)),
-  green(cache.offset(Magick::GreenPixelChannel)),
-  blue(cache.offset(Magick::BluePixelChannel)),
-  alpha(cache.offset(Magick::AlphaPixelChannel)),
-  stride(img.channels())
+Pixels::Pixels (Magick::Image &img)
+    : img (img),
+      cache (img),
+      red (cache.offset (Magick::RedPixelChannel)),
+      green (cache.offset (Magick::GreenPixelChannel)),
+      blue (cache.offset (Magick::BluePixelChannel)),
+      alpha (cache.offset (Magick::AlphaPixelChannel)),
+      stride (img.channels ())
 {
-  assert(red >= 0);
-  assert(green >= 0);
-  assert(blue >= 0);
+	assert (red >= 0);
+	assert (green >= 0);
+	assert (blue >= 0);
 }
 
-PixelPacket Pixels::get(ssize_t x, ssize_t y, size_t w, size_t h)
+PixelPacket Pixels::get (ssize_t x, ssize_t y, size_t w, size_t h)
 {
-  return PixelPacket(this, cache.get(x, y, w, h));
+	return PixelPacket (this, cache.get (x, y, w, h));
 }
 
-void Pixels::sync()
+void Pixels::sync ()
 {
-  cache.sync();
+	cache.sync ();
 }
 #endif
