@@ -13,7 +13,6 @@ AC_PROG_CXX
 
 AC_LANG_PUSH([C++])
 AX_APPEND_COMPILE_FLAGS([-Wall -pthread -flto -pipe])
-AX_APPEND_LINK_FLAGS([-pthread -flto])
 AX_CXX_COMPILE_STDCXX_11(noext, mandatory)
 AC_LANG_POP()
 

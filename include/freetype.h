@@ -18,12 +18,57 @@
  * You should have received a copy of the GNU General Public License
  * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
-/** @file ft_error.h
- *  @brief FreeType error strings
+/** @file freetype.h
+ *  @brief FreeType wrappers
  */
 #pragma once
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
-const char *ft_error (FT_Error error);
+#include <memory>
+#include <string>
+
+namespace freetype
+{
+class Library : public std::enable_shared_from_this<Library>
+{
+public:
+	~Library ();
+
+	static std::shared_ptr<Library> makeLibrary ();
+
+	FT_Library library () const;
+
+private:
+	Library ();
+
+	FT_Library m_library;
+};
+
+class Face
+{
+public:
+	~Face ();
+
+	static std::unique_ptr<Face>
+	    makeFace (std::shared_ptr<Library> library, const std::string &path, FT_Long index);
+
+	FT_Face operator-> ();
+
+	FT_ULong getFirstChar (FT_UInt &faceIndex);
+	FT_ULong getNextChar (FT_ULong charCode, FT_UInt &faceIndex);
+	FT_Error loadGlyph (FT_UInt glyphIndex, FT_Int32 loadFlags);
+
+	FT_Error selectCharmap (FT_Encoding encoding);
+	FT_Error setCharSize (double ptSize);
+
+private:
+	Face ();
+
+	std::shared_ptr<Library> m_library;
+	FT_Face m_face;
+};
+
+const char *strerror (FT_Error error);
+}

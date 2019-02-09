@@ -22,20 +22,22 @@
  *  @brief mkbcfnt program entry point
  */
 #include "bcfnt.h"
-#include "ft_error.h"
+#include "freetype.h"
 #include "future.h"
 
 #include <getopt.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <set>
+#include <cstring>
 #include <string>
 
 namespace
 {
 /** @brief Print version information */
-void print_version ()
+void printVersion ()
 {
 	std::printf ("mkbcfnt v1.0.1\n"
 	             "Copyright (c) 2019\n"
@@ -59,7 +61,7 @@ void print_version ()
 /** @brief Print usage information
  *  @param[in] prog Program invocation
  */
-void print_usage (const char *prog)
+void printUsage (const char *prog)
 {
 	std::printf ("Usage: %s [OPTIONS...] <input1> [input2...]\n", prog);
 
@@ -75,40 +77,47 @@ void print_usage (const char *prog)
 	    "    <inputN>                     Input file(s). Lower numbers get priority\n\n");
 }
 
-void parse_list (std::vector<std::uint16_t> &out, const char *list)
+bool parseList (std::vector<std::uint16_t> &out, const char *path)
 {
-	FILE *in = std::fopen (list, "r");
-	if (in)
+	FILE *fp = std::fopen (path, "r");
+	if (!fp)
 	{
-		while (!std::feof (in) && !std::ferror (in))
-		{
-			int v;
-			if (std::fscanf (in, "%i", &v) == 1)
-				out.emplace_back (static_cast<std::uint16_t> (v));
-		}
-		if (std::ferror (in))
-		{
-			std::fprintf (stderr, "Error while reading list file %s", list);
-		}
+		std::fprintf (stderr, "Error opening list file '%s': %s\n", path, std::strerror (errno));
+		return false;
 	}
-	else
+
+	while (!std::feof (fp) && !std::ferror (fp))
 	{
-		std::fprintf (stderr, "Error opening list file %s", list);
+		int v;
+		if (std::fscanf (fp, "%i", &v) != 1)
+			break;
+
+		out.emplace_back (static_cast<std::uint16_t> (v));
 	}
-	std::fclose (in);
-	std::sort (out.begin (), out.end ());
+
+	if (std::ferror (fp))
+	{
+		std::fprintf (stderr, "Error while reading list file %s\n", path);
+		std::fclose (fp);
+		return false;
+	}
+
+	std::fclose (fp);
+
+	std::sort (std::begin (out), std::end (out));
+	return true;
 }
 
 /** @brief Program long options */
-const struct option long_options[] = {
+const struct option longOptions[] = {
     /* clang-format off */
 	{ "blacklist", required_argument, nullptr, 'b', },
-	{ "help",     no_argument,       nullptr, 'h', },
-	{ "output",   required_argument, nullptr, 'o', },
-	{ "size",     required_argument, nullptr, 's', },
-	{ "version",  no_argument,       nullptr, 'v', },
+	{ "help",      no_argument,       nullptr, 'h', },
+	{ "output",    required_argument, nullptr, 'o', },
+	{ "size",      required_argument, nullptr, 's', },
+	{ "version",   no_argument,       nullptr, 'v', },
 	{ "whitelist", required_argument, nullptr, 'w', },
-	{ nullptr,    no_argument,       nullptr,   0, },
+	{ nullptr,     no_argument,       nullptr,   0, },
     /* clang-format on */
 };
 }
@@ -123,143 +132,196 @@ int main (int argc, char *argv[])
 {
 	const char *prog = argv[0];
 
+	// set line buffering
 	std::setvbuf (stdout, nullptr, _IOLBF, 0);
 	std::setvbuf (stderr, nullptr, _IOLBF, 0);
 
-	std::string output_path;
+	std::string outputPath;
 	std::vector<std::uint16_t> list;
 	bool isBlacklist = true;
-	int size         = 22;
+	double ptSize    = 22.0;
 
 	// parse options
 	int c;
-	while ((c = ::getopt_long (argc, argv, "b:ho:s:vw:", long_options, nullptr)) != -1)
+	while ((c = ::getopt_long (argc, argv, "b:ho:s:vw:", longOptions, nullptr)) != -1)
 	{
 		switch (c)
 		{
 		case 'h':
 			// show help
-			print_usage (prog);
+			printUsage (prog);
 			return EXIT_SUCCESS;
 
 		case 'o':
 			// set output path option
-			output_path = optarg;
+			outputPath = optarg;
 			break;
 
 		case 's':
 			// set font size
-			size = atoi (optarg);
-			if (!size)
+			try
 			{
-				size = 22;
+				ptSize = std::stod (optarg);
+				if (!std::isfinite (ptSize) || ptSize == 0.0)
+				{
+					std::fprintf (stderr, "Invalid point size '%s'\n", optarg);
+					return EXIT_FAILURE;
+				}
+			}
+			catch (...)
+			{
+				std::fprintf (stderr, "Invalid point size '%s'\n", optarg);
+				return EXIT_FAILURE;
 			}
 			break;
 
 		case 'v':
 			// print version
-			print_version ();
+			printVersion ();
 			return EXIT_SUCCESS;
 
 		case 'b':
 			// set blacklist
-			parse_list (list, optarg);
+			parseList (list, optarg);
 			isBlacklist = true;
 			break;
 
 		case 'w':
 			// set whitelist
-			parse_list (list, optarg);
+			parseList (list, optarg);
 			isBlacklist = false;
 			break;
 
 		default:
-			print_usage (prog);
+			printUsage (prog);
 			return EXIT_FAILURE;
 		}
 	}
 
-	if (output_path.empty ())
+	// output path required
+	if (outputPath.empty ())
 	{
 		std::fprintf (stderr, "No output file provided\n");
 		return EXIT_FAILURE;
 	}
 
+	// input path required
 	if (optind >= argc)
 	{
 		std::fprintf (stderr, "No input file provided\n");
 		return EXIT_FAILURE;
 	}
 
+	// collect input paths
 	std::vector<std::string> inputs;
-	for (int i = optind; i < argc; i++)
-	{
-		inputs.push_back (argv[i]);
-	}
+	while (optind < argc)
+		inputs.emplace_back (argv[optind++]);
 
-	FT_Library library;
-	FT_Error error = FT_Init_FreeType (&library);
-	if (error)
-	{
-		std::fprintf (stderr, "FT_Init_FreeType: %s\n", ft_error (error));
+	auto library = freetype::Library::makeLibrary ();
+	if (!library)
 		return EXIT_FAILURE;
-	}
 
 	auto bcfnt = future::make_unique<bcfnt::BCFNT> ();
-	for (size_t i = 0; i < inputs.size (); i++)
+	for (const auto &input : inputs)
 	{
-		FILE *in = fopen (inputs[i].c_str (), "rb");
-		if (in)
+		FILE *fp = std::fopen (input.c_str (), "rb");
+		if (!fp)
 		{
-			char magic[4];
-			fread (magic, 1, 4, in);
-			if (!memcmp (magic, "CFNT", 4))
+			std::fprintf (stderr, "fopen '%s': %s\n", input.c_str (), std::strerror (errno));
+			return EXIT_FAILURE;
+		}
+
+		// try to read BCFNT magic
+		char magic[4];
+		std::size_t rc = std::fread (magic, 1, sizeof (magic), fp);
+		if (rc != sizeof (magic))
+		{
+			if (std::ferror (fp))
+				std::fprintf (stderr, "fread: %s\n", std::strerror (errno));
+			else if (std::feof (fp))
+				std::fprintf (stderr, "fread: Unexpected end-of-file\n");
+			else
+				std::fprintf (stderr, "fread: Unknown read failure\n");
+
+			std::fclose (fp);
+			return EXIT_FAILURE;
+		}
+
+		// check if BCFNT
+		if (std::memcmp (magic, "CFNT", sizeof (magic)) != 0)
+		{
+			// not BCFNT; try loading with freetype
+			std::fclose (fp);
+
+			auto face = freetype::Face::makeFace (library, input, 0);
+			if (!face)
+				return EXIT_FAILURE;
+
+			FT_Error error = face->selectCharmap (FT_ENCODING_UNICODE);
+			if (error)
+				return EXIT_FAILURE;
+
+			error = face->setCharSize (ptSize);
+			if (error)
+				return EXIT_FAILURE;
+
+			bcfnt->addFont (std::move (face), list, isBlacklist);
+			continue;
+		}
+
+		// BCFNT; try to decode
+		if (std::fseek (fp, 0, SEEK_END) != 0)
+		{
+			std::fprintf (stderr, "fseek: %s\n", std::strerror (errno));
+			std::fclose (fp);
+			return EXIT_FAILURE;
+		}
+
+		std::size_t fileSize = std::ftell (fp);
+		if (fileSize == static_cast<std::size_t> (-1L))
+		{
+			std::fprintf (stderr, "ftell: %s\n", std::strerror (errno));
+			std::fclose (fp);
+			return EXIT_FAILURE;
+		}
+
+		if (std::fseek (fp, 0, SEEK_SET) != 0)
+		{
+			std::fprintf (stderr, "fseek: %s\n", std::strerror (errno));
+			std::fclose (fp);
+			return EXIT_FAILURE;
+		}
+
+		std::vector<std::uint8_t> data (fileSize);
+
+		std::size_t offset = 0;
+		while (offset < fileSize)
+		{
+			std::size_t rc = std::fread (&data[offset], 1, fileSize - offset, fp);
+			if (rc != fileSize - offset)
 			{
-				fseek (in, 0, SEEK_END);
-				std::size_t fileSize = ftell (in);
-				fseek (in, 0, SEEK_SET);
-				std::vector<std::uint8_t> data (fileSize);
-				fread (data.data (), 1, fileSize, in);
-				fclose (in);
-				bcfnt::BCFNT font (data);
-				bcfnt->addFont (font, list, isBlacklist);
-				continue;
+				if (rc == 0 || std::ferror (fp))
+				{
+					if (std::ferror (fp))
+						std::fprintf (stderr, "fread: %s\n", std::strerror (errno));
+					else if (std::feof (fp))
+						std::fprintf (stderr, "fread: Unexpected end-of-file\n");
+					else
+						std::fprintf (stderr, "fread: Unknown read failure\n");
+
+					std::fclose (fp);
+					return EXIT_FAILURE;
+				}
 			}
-		}
-		fclose (in);
-		FT_Face face;
-		error = FT_New_Face (library, inputs[i].c_str (), 0, &face);
-		if (error)
-		{
-			std::fprintf (stderr, "FT_New_Face: %s\n", ft_error (error));
-			FT_Done_FreeType (library);
-			return EXIT_FAILURE;
+
+			offset += rc;
 		}
 
-		error = FT_Select_Charmap (face, FT_ENCODING_UNICODE);
-		if (error)
-		{
-			std::fprintf (stderr, "FT_Select_Charmap: %s\n", ft_error (error));
-			FT_Done_Face (face);
-			FT_Done_FreeType (library);
-			return EXIT_FAILURE;
-		}
+		std::fclose (fp);
 
-		error = FT_Set_Char_Size (face, size << 6, 0, 96, 0);
-		if (error)
-		{
-			std::fprintf (stderr, "FT_Set_Pixel_Sizes: %s\n", ft_error (error));
-			FT_Done_Face (face);
-			FT_Done_FreeType (library);
-			return EXIT_FAILURE;
-		}
-
-		bcfnt->addFont (face, list, isBlacklist);
-		FT_Done_Face (face);
+		auto font = future::make_unique<bcfnt::BCFNT> (data);
+		bcfnt->addFont (*font, list, isBlacklist);
 	}
 
-	const int code = bcfnt->serialize (output_path) ? EXIT_SUCCESS : EXIT_FAILURE;
-
-	FT_Done_FreeType (library);
-	return code;
+	return bcfnt->serialize (outputPath) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

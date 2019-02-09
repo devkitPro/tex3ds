@@ -25,7 +25,7 @@
 #include "magick_compat.h"
 
 #include "bcfnt.h"
-#include "ft_error.h"
+#include "freetype.h"
 #include "future.h"
 #include "quantum.h"
 #include "swizzle.h"
@@ -38,6 +38,11 @@
 
 namespace
 {
+bool allowed (std::uint16_t code, const std::vector<std::uint16_t> &list, bool isBlacklist)
+{
+	return std::binary_search (std::begin (list), std::end (list), code) != isBlacklist;
+}
+
 void appendSheet (std::vector<std::uint8_t> &data, Magick::Image &sheet)
 {
 	swizzle (sheet, false);
@@ -67,6 +72,7 @@ Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &data,
     const unsigned HEIGHT)
 {
 	Magick::Image ret (Magick::Geometry (WIDTH, HEIGHT), transparent ());
+
 	Pixels cache (ret);
 	for (unsigned y = 0; y < HEIGHT; y += 8)
 	{
@@ -76,12 +82,16 @@ Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &data,
 			for (unsigned i = 0; i < 8 * 8 / 2; ++i)
 			{
 				Magick::Color opacity;
+
 				opacity.alphaQuantum (bits_to_quantum<4> ((*data) & 0xF));
 				p[2 * i].opacity = quantumAlpha (opacity);
-				opacity.alphaQuantum (bits_to_quantum<4> ((*data) >> 4 & 0xF));
+
+				opacity.alphaQuantum (bits_to_quantum<4> (((*data) >> 4) & 0xF));
 				p[2 * i + 1].opacity = quantumAlpha (opacity);
+
 				++data;
 			}
+
 			cache.sync ();
 		}
 	}
@@ -97,8 +107,9 @@ void coalesceCMAP (std::vector<bcfnt::CMAP> &cmaps)
 	std::uint16_t codeBegin                  = 0xFFFF;
 	std::uint16_t codeEnd                    = 0;
 	std::unique_ptr<bcfnt::CMAPScan> scanMap = future::make_unique<bcfnt::CMAPScan> ();
-	auto cmap                                = cmaps.begin ();
-	while (cmap != cmaps.end ())
+
+	auto cmap = std::begin (cmaps);
+	while (cmap != std::end (cmaps))
 	{
 		if (cmap->mappingMethod == bcfnt::CMAPData::CMAP_TYPE_DIRECT &&
 		    cmap->codeEnd - cmap->codeBegin < MIN_CHARS - 1)
@@ -110,16 +121,20 @@ void coalesceCMAP (std::vector<bcfnt::CMAP> &cmaps)
 				codeEnd = cmap->codeEnd;
 
 			const auto &direct = dynamic_cast<bcfnt::CMAPDirect &> (*cmap->data);
-			for (std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; i++)
-				scanMap->entries.emplace_back (bcfnt::CMAPScan::Entry{
-				    i, static_cast<uint16_t> (i - cmap->codeBegin + direct.offset)});
+			for (std::uint16_t i = cmap->codeBegin; i <= cmap->codeEnd; ++i)
+				scanMap->entries.emplace (
+				    i, static_cast<uint16_t> (i - cmap->codeBegin + direct.offset));
 
 			cmap = cmaps.erase (cmap);
 		}
 		else
 			++cmap;
 	}
-	cmaps.push_back ({codeBegin,
+
+	if (scanMap->entries.empty ())
+		return;
+
+	cmaps.emplace_back (bcfnt::CMAP{codeBegin,
 	    codeEnd,
 	    static_cast<uint16_t> (bcfnt::CMAPData::CMAP_TYPE_SCAN),
 	    0,
@@ -132,7 +147,7 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const char 
 	const std::size_t len = std::strlen (str);
 
 	o.reserve (o.size () + len);
-	o.insert (o.end (), str, str + len);
+	o.insert (std::end (o), str, str + len);
 
 	return o;
 }
@@ -167,10 +182,8 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint32
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPScan &v)
 {
 	o << static_cast<uint16_t> (v.entries.size ());
-	for (const auto &entry : v.entries)
-	{
-		o << static_cast<uint16_t> (entry.code) << static_cast<uint16_t> (entry.glyphIndex);
-	}
+	for (const auto &pair : v.entries)
+		o << static_cast<uint16_t> (pair.first) << static_cast<uint16_t> (pair.second);
 
 	return o;
 }
@@ -178,9 +191,8 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPTable &v)
 {
 	for (const auto &entry : v.table)
-	{
 		o << static_cast<uint16_t> (entry);
-	}
+
 	if (v.table.size () % 2)
 		o << static_cast<uint16_t> (0);
 
@@ -190,150 +202,135 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt
 std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
     std::uint32_t &v)
 {
-	v = *(i++) | *(i++) << 8 | *(i++) << 16 | *(i++) << 24;
+	v = *i++;
+	v |= *i++ << 8;
+	v |= *i++ << 16;
+	v |= *i++ << 24;
+
 	return i;
 }
 
 std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
     std::uint16_t &v)
 {
-	v = *(i++) | *(i++) << 8;
+	v = *i++;
+	v |= *i++ << 8;
+
 	return i;
 }
 
 std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
     std::uint8_t &v)
 {
-	v = *(i++);
+	v = *i++;
+
 	return i;
 }
 
 std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
     bcfnt::CharWidthInfo &v)
 {
-	v.left       = *(i++);
-	v.glyphWidth = *(i++);
-	v.charWidth  = *(i++);
-	return i;
-}
+	v.left       = *i++;
+	v.glyphWidth = *i++;
+	v.charWidth  = *i++;
 
-std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
-    bcfnt::CMAPScan::Entry &v)
-{
-	i >> v.code;
-	i >> v.glyphIndex;
 	return i;
 }
 }
 
 namespace bcfnt
 {
-struct CharMap
-{
-	CharMap () : code (0), faceIndex (0), cfntIndex (0)
-	{
-	}
-
-	CharMap (FT_ULong code, FT_UInt faceIndex, FT_Face face)
-	    : code (code), faceIndex (faceIndex), cfntIndex (0), face (face)
-	{
-	}
-
-	const FT_ULong code;     ///< Code point.
-	const FT_UInt faceIndex; ///< FreeType face index.
-	std::uint16_t cfntIndex; ///< CFNT glyph index.
-	FT_Face face;
-};
-
 std::uint16_t CMAP::codePointFromIndex (std::uint16_t index) const
 {
 	switch (mappingMethod)
 	{
 	case bcfnt::CMAPData::CMAP_TYPE_DIRECT:
 	{
-		std::uint16_t chars = codeEnd - codeBegin + 1;
-		CMAPDirect &direct  = dynamic_cast<CMAPDirect &> (*data);
-		if (index - direct.offset < chars)
-		{
-			return codeBegin + index - direct.offset;
-		}
-		return 0xFFFF;
+		CMAPDirect &direct = dynamic_cast<CMAPDirect &> (*data);
+
+		if (index < codeBegin + direct.offset)
+			return 0xFFFF;
+
+		if (index > codeEnd + direct.offset)
+			return 0xFFFF;
+
+		return codeBegin + index - direct.offset;
 	}
 
 	case bcfnt::CMAPData::CMAP_TYPE_TABLE:
 	{
 		CMAPTable &table = dynamic_cast<CMAPTable &> (*data);
-		auto found       = std::find (table.table.begin (), table.table.end (), index);
-		if (found != table.table.end ())
-		{
-			return std::distance (table.table.begin (), found) + codeBegin;
-		}
-		return 0xFFFF;
+
+		auto found = std::find (std::begin (table.table), std::end (table.table), index);
+		if (found == std::end (table.table))
+			return 0xFFFF;
+
+		return codeBegin + std::distance (std::begin (table.table), found);
 	}
 
 	case bcfnt::CMAPData::CMAP_TYPE_SCAN:
 	{
 		CMAPScan &scan = dynamic_cast<CMAPScan &> (*data);
-		auto found     = std::find_if (scan.entries.begin (),
-            scan.entries.end (),
-            [index](const CMAPScan::Entry &e) { return e.glyphIndex == index; });
-		if (found != scan.entries.end ())
-		{
-			return found->code;
-		}
-		return 0xFFFF;
+
+		auto match = [&](const std::pair<std::uint16_t, std::uint16_t> &pair) {
+			return pair.second == index;
+		};
+
+		auto pair = std::find_if (std::begin (scan.entries), std::end (scan.entries), match);
+		if (pair == std::end (scan.entries))
+			return 0xFFFF;
+
+		return pair->first;
 	}
 
 	default:
-		abort ();
+		std::abort ();
 	}
 }
 
-void BCFNT::addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlacklist)
+void BCFNT::addFont (std::unique_ptr<freetype::Face> face,
+    std::vector<std::uint16_t> &list,
+    bool isBlacklist)
 {
 	int descent = std::numeric_limits<int>::max ();
 
-	lineFeed = std::max (lineFeed, static_cast<uint8_t> (face->size->metrics.height >> 6));
-	height   = std::max (height, static_cast<uint8_t> ((face->bbox.yMax - face->bbox.yMin) >> 6));
-	width    = std::max (width, static_cast<uint8_t> ((face->bbox.xMax - face->bbox.xMin) >> 6));
-	maxWidth = std::max (maxWidth, static_cast<uint8_t> (face->size->metrics.max_advance >> 6));
-	ascent   = std::max (ascent, static_cast<uint8_t> (face->size->metrics.ascender >> 6));
-	descent  = std::min (descent, static_cast<int> (face->size->metrics.descender) >> 6);
+	lineFeed = std::max (lineFeed, static_cast<std::uint8_t> ((*face)->size->metrics.height >> 6));
+	height   = std::max (
+        height, static_cast<std::uint8_t> (((*face)->bbox.yMax - (*face)->bbox.yMin) >> 6));
+	width = std::max (
+	    width, static_cast<std::uint8_t> (((*face)->bbox.xMax - (*face)->bbox.xMin) >> 6));
+	maxWidth =
+	    std::max (maxWidth, static_cast<std::uint8_t> ((*face)->size->metrics.max_advance >> 6));
+	ascent  = std::max (ascent, static_cast<std::uint8_t> ((*face)->size->metrics.ascender >> 6));
+	descent = std::min (descent, static_cast<int> ((*face)->size->metrics.descender) >> 6);
 
 	// extract mappings from font face
 	FT_UInt faceIndex;
-	FT_ULong code = FT_Get_First_Char (face, &faceIndex);
+	FT_ULong code = face->getFirstChar (faceIndex);
 	while (faceIndex != 0)
 	{
 		// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
 		if (code >= std::numeric_limits<std::uint16_t>::max () || glyphs.count (code))
 		{
-			code = FT_Get_Next_Char (face, code, &faceIndex);
+			code = face->getNextChar (code, faceIndex);
 			continue;
 		}
 
-		FT_Error error = FT_Load_Glyph (face, faceIndex, FT_LOAD_RENDER);
+		FT_Error error = face->loadGlyph (faceIndex, FT_LOAD_RENDER);
 		if (error)
 		{
-			std::fprintf (stderr, "FT_Load_Glyph: %s\n", ft_error (error));
-			code = FT_Get_Next_Char (face, code, &faceIndex);
+			code = face->getNextChar (code, faceIndex);
 			continue;
 		}
 
-		if (std::binary_search (list.begin (), list.end (), static_cast<std::uint16_t> (code)) !=
-		        isBlacklist &&
-		    !glyphs.count (code))
+		if (allowed (code, list, isBlacklist) && !glyphs.count (code))
 		{
-			if (face->glyph->bitmap_top > ascent)
-				ascent = face->glyph->bitmap_top;
+			ascent = std::max<int> (ascent, (*face)->glyph->bitmap_top);
 
-			if (static_cast<int> (face->glyph->bitmap_top) -
-			        static_cast<int> (face->glyph->bitmap.rows) <
-			    descent)
-				descent = face->glyph->bitmap_top - face->glyph->bitmap.rows;
+			descent =
+			    std::min<int> (descent, (*face)->glyph->bitmap_top - (*face)->glyph->bitmap.rows);
 
-			if (face->glyph->bitmap.width > maxWidth)
-				maxWidth = face->glyph->bitmap.width;
+			maxWidth = std::max<std::uint8_t> (maxWidth, (*face)->glyph->bitmap.width);
 
 			cellWidth   = maxWidth + 1;
 			cellHeight  = ascent - descent;
@@ -343,8 +340,11 @@ void BCFNT::addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlac
 			glyphs.emplace (code, currentGlyphImage (face));
 		}
 
-		code = FT_Get_Next_Char (face, code, &faceIndex);
+		code = face->getNextChar (code, faceIndex);
 	}
+
+	if (glyphs.empty ())
+		return;
 
 	cellWidth      = maxWidth + 1;
 	cellHeight     = ascent - descent;
@@ -354,23 +354,20 @@ void BCFNT::addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlac
 	glyphsPerCol   = SHEET_HEIGHT / glyphHeight;
 	glyphsPerSheet = glyphsPerRow * glyphsPerCol;
 
-	if (glyphs.empty ())
-		return;
-
 	// try to provide a replacement character
 	if (glyphs.count (0xFFFD))
-		altIndex = std::distance (glyphs.begin (), glyphs.find (0xFFFD));
+		altIndex = std::distance (std::begin (glyphs), glyphs.find (0xFFFD));
 	else if (glyphs.count ('?'))
-		altIndex = std::distance (glyphs.begin (), glyphs.find ('?'));
+		altIndex = std::distance (std::begin (glyphs), glyphs.find ('?'));
 	else if (glyphs.count (' '))
-		altIndex = std::distance (glyphs.begin (), glyphs.find (' '));
+		altIndex = std::distance (std::begin (glyphs), glyphs.find (' '));
 	else
 		altIndex = 0;
 
 	// collect character mappings
 	refreshCMAPs ();
 
-	numSheets = glyphs.size () / glyphsPerSheet + (glyphs.size () % glyphsPerSheet ? 1 : 0);
+	numSheets = (glyphs.size () - 1) / glyphsPerSheet + 1;
 
 	coalesceCMAP (cmaps);
 }
@@ -378,134 +375,149 @@ void BCFNT::addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlac
 BCFNT::BCFNT (const std::vector<std::uint8_t> &data)
 {
 	assert (data.size () >= 0x10);
-	auto i = data.begin ();
+
 	std::uint16_t in16;
 	std::uint32_t in32;
-	i += 4;    // CFNT magic
-	i >> in16; // BOM
+
+	auto input = std::begin (data);
+
+	input += 4;    // CFNT magic
+	input >> in16; // BOM
 	if (in16 != 0xFEFF)
 	{
-		fprintf (stderr, "No support for big-endian BCFNTs yet");
+		std::fprintf (stderr, "No support for big-endian BCFNTs yet\n");
 		return;
 	}
-	i += 2;                        // header size
-	i += 4;                        // version
-	i >> in32;                     // file size
+	input += 2;                    // header size
+	input += 4;                    // version
+	input >> in32;                 // file size
 	assert (in32 <= data.size ()); // Check the file size
-	i += 4;                        // number of blocks
+	input += 4;                    // number of blocks
 
-	i += 4; // FINF magic
-	i += 4; // section size
-	i += 1; // font type (still not sure about this thing)
-	i >> lineFeed;
-	i >> altIndex;
-	i >> defaultWidth;
-	i += 1; // encoding
+	input += 4; // FINF magic
+	input += 4; // section size
+	input += 1; // font type (still not sure about this thing)
+	input >> lineFeed;
+	input >> altIndex;
+	input >> defaultWidth;
+	input += 1; // encoding
 	std::uint32_t tglpOffset;
 	std::uint32_t cwdhOffset;
 	std::uint32_t cmapOffset;
-	i >> tglpOffset;
-	i >> cwdhOffset;
-	i >> cmapOffset;
-	i >> height;
-	i >> width;
-	i >> ascent;
-	i += 1; // padding
+	input >> tglpOffset;
+	input >> cwdhOffset;
+	input >> cmapOffset;
+	input >> height;
+	input >> width;
+	input >> ascent;
+	input += 1; // padding
 
 	// Do the CMAP stuff first
 	while (cmapOffset != 0)
 	{
-		i = data.begin () + cmapOffset - 4; // Skip to right after CMAP magic, on section size
-		i >> in32;                          // CMAP size
-		in32 -= 0x14;                       // size without CMAP header
-		assert (in32 % 4 == 0); // If it's not a multiple of two, something is very wrong
+		// Skip to right after CMAP magic, on section size
+		input = std::begin (data) + cmapOffset - 4;
+
+		input >> in32;          // CMAP size
+		in32 -= 0x14;           // size without CMAP header
+		assert (in32 % 4 == 0); // If it's not a multiple of four, something is very wrong
 		bcfnt::CMAP cmap;
-		i >> cmap.codeBegin; // Start codepoint
-		i >> cmap.codeEnd;   // End codepoint
-		i >> cmap.mappingMethod;
-		i >> cmap.reserved;
-		i >> cmapOffset;
+		input >> cmap.codeBegin; // Start codepoint
+		input >> cmap.codeEnd;   // End codepoint
+		input >> cmap.mappingMethod;
+		input >> cmap.reserved;
+		input >> cmapOffset;
+
+		assert (cmap.codeEnd >= cmap.codeBegin);
+		const std::uint16_t numCodes = cmap.codeEnd - cmap.codeBegin + 1;
 
 		switch (cmap.mappingMethod)
 		{
 		case bcfnt::CMAPData::CMAP_TYPE_DIRECT:
 			assert (in32 == 0x4);
-			i >> in16;
+			input >> in16;
 			cmap.data = future::make_unique<bcfnt::CMAPDirect> (in16);
 			break;
 
 		case bcfnt::CMAPData::CMAP_TYPE_TABLE:
-			assert (in32 == static_cast<std::uint16_t> (cmap.codeEnd - cmap.codeBegin + 1) * 2 +
-			                    ((cmap.codeEnd - cmap.codeBegin + 1) % 2) * 2);
+			assert (in32 == ((numCodes + 1u) & ~1u) * 2);
+
 			cmap.data = future::make_unique<bcfnt::CMAPTable> ();
-			for (std::uint16_t code = cmap.codeBegin; code <= cmap.codeEnd; code++)
+			for (std::uint16_t code = cmap.codeBegin; code <= cmap.codeEnd; ++code)
 			{
-				i >> in16;
+				input >> in16;
 				dynamic_cast<CMAPTable &> (*cmap.data).table.emplace_back (in16);
 			}
 			break;
 
 		case bcfnt::CMAPData::CMAP_TYPE_SCAN:
-			i >> in16; // number of entries
-			assert (in32 == (in16 + 1) * 4);
+		{
+			input >> in16; // number of entries
+			assert (in32 == (in16 + 1u) * 4);
 			cmap.data = future::make_unique<bcfnt::CMAPScan> ();
-			dynamic_cast<CMAPScan &> (*cmap.data).entries.resize (in16);
-			for (std::uint16_t entry = 0; entry < in16; entry++)
+
+			auto &scan = dynamic_cast<CMAPScan &> (*cmap.data);
+			for (std::uint16_t entry = 0; entry < in16; ++entry)
 			{
-				i >> dynamic_cast<CMAPScan &> (*cmap.data).entries[entry];
+				std::uint16_t code;
+				std::uint16_t index;
+
+				input >> code >> index;
+				scan.entries.emplace (code, index);
 			}
 			break;
+		}
 
 		default:
-			abort ();
+			std::abort ();
 		}
 
 		cmaps.emplace_back (std::move (cmap));
 	}
 
-	i = data.begin () + tglpOffset; // Fast forward to TGLP
-	i >> cellWidth;
-	i >> cellHeight;
+	input = std::begin (data) + tglpOffset; // Fast forward to TGLP
+	input >> cellWidth;
+	input >> cellHeight;
 	glyphWidth  = cellWidth + 1;
 	glyphHeight = cellHeight + 1;
-	i += 1; // baseline (same as ascent)
-	i >> maxWidth;
-	i >> SHEET_SIZE;
-	i >> numSheets;
-	i >> in16; // sheet format
+	input += 1; // baseline (same as ascent)
+	input >> maxWidth;
+	input >> SHEET_SIZE;
+	input >> numSheets;
+	input >> in16; // sheet format
 	if (in16 != 0xB)
 	{
-		fprintf (stderr, "No formats except for 4-bit alpha currently supported");
+		std::fprintf (stderr, "No formats except for 4-bit alpha currently supported");
 		return;
 	}
-	i >> glyphsPerRow;
-	i >> glyphsPerCol;
+	input >> glyphsPerRow;
+	input >> glyphsPerCol;
 	glyphsPerSheet = glyphsPerRow * glyphsPerCol;
-	i >> SHEET_WIDTH;
-	i >> SHEET_HEIGHT;
+	input >> SHEET_WIDTH;
+	input >> SHEET_HEIGHT;
 	assert (SHEET_WIDTH * SHEET_HEIGHT / 2 == SHEET_SIZE);
 	assert (SHEET_WIDTH / glyphWidth == glyphsPerRow);
 	assert (SHEET_HEIGHT / glyphHeight == glyphsPerCol);
-	i >> in32; // Sheet Offset
-	i = data.begin () + in32;
-	readGlyphImages (i, numSheets);
+	input >> in32; // Sheet Offset
+	input = std::begin (data) + in32;
+	readGlyphImages (input, numSheets);
 
 	while (cwdhOffset != 0)
 	{
-		i = data.begin () + cwdhOffset - 4; // Skip to right after CWDH magic, on section size
-		i >> in32;                          // CWDH size
-		in32 -= 0x10;                       // size without CWDH header
+		// Skip to right after CWDH magic, on section size
+		input = std::begin (data) + cwdhOffset - 4;
+
+		input >> in32; // CWDH size
+		in32 -= 0x10;  // size without CWDH header
 		// assert(in32 % 3 == 0); // If it's not a multiple of three, something is very wrong
 		std::uint16_t startIndex;
-		i >> startIndex; // start index
-		i >> in16;       // end index
+		input >> startIndex; // start index
+		input >> in16;       // end index
 		// assert(in32 == static_cast<std::uint16_t>(in16 - startIndex) * 3);
-		i >> cwdhOffset;
+		input >> cwdhOffset;
 		assert (in16 <= glyphs.size ());
-		for (std::uint16_t glyph = startIndex; glyph < in16; glyph++)
-		{
-			i >> glyphs[codepoint (glyph)].info;
-		}
+		for (std::uint16_t glyph = startIndex; glyph < in16; ++glyph)
+			input >> glyphs[codepoint (glyph)].info;
 	}
 }
 
@@ -560,7 +572,7 @@ bool BCFNT::serialize (const std::string &path)
 			break;
 
 		default:
-			abort ();
+			std::abort ();
 		}
 	}
 
@@ -625,11 +637,11 @@ bool BCFNT::serialize (const std::string &path)
 	// CWDH header + data
 	assert (output.size () == cwdhOffset);
 
-	output << "CWDH"                                                            // magic
-	       << static_cast<std::uint32_t> (0x10 + (3 * glyphs.size () + 3) & ~3) // section size
-	       << static_cast<std::uint16_t> (0)                                    // start index
-	       << static_cast<std::uint16_t> (glyphs.size ())                       // end index
-	       << static_cast<std::uint32_t> (0);                                   // next CWDH offset
+	output << "CWDH"                                                              // magic
+	       << static_cast<std::uint32_t> (0x10 + ((3 * glyphs.size () + 3) & ~3)) // section size
+	       << static_cast<std::uint16_t> (0)                                      // start index
+	       << static_cast<std::uint16_t> (glyphs.size ())                         // end index
+	       << static_cast<std::uint32_t> (0); // next CWDH offset
 
 	for (const auto &info : glyphs)
 	{
@@ -637,7 +649,8 @@ bool BCFNT::serialize (const std::string &path)
 		       << static_cast<std::uint8_t> (info.second.info.glyphWidth)
 		       << static_cast<std::uint8_t> (info.second.info.charWidth);
 	}
-	for (int i = 0; i < (4 - (3 * glyphs.size () % 4)) % 4; i++)
+
+	while (output.size () & 0x3)
 		output << static_cast<std::uint8_t> (0);
 
 	for (const auto &cmap : cmaps)
@@ -661,7 +674,7 @@ bool BCFNT::serialize (const std::string &path)
 			break;
 
 		default:
-			abort ();
+			std::abort ();
 		}
 
 		output << "CMAP"                                          // magic
@@ -703,7 +716,7 @@ bool BCFNT::serialize (const std::string &path)
 		}
 
 		default:
-			abort ();
+			std::abort ();
 		}
 
 		cmapOffset += size;
@@ -748,17 +761,18 @@ bool BCFNT::serialize (const std::string &path)
 
 std::vector<Magick::Image> BCFNT::sheetify ()
 {
-	std::map<std::uint16_t, bcfnt::Glyph>::iterator currentGlyph = glyphs.begin ();
+	std::map<std::uint16_t, bcfnt::Glyph>::iterator currentGlyph = std::begin (glyphs);
 
 	std::vector<Magick::Image> ret;
 
-	for (unsigned sheet = 0; sheet * glyphsPerSheet < glyphs.size (); sheet++)
+	for (unsigned sheet = 0; sheet * glyphsPerSheet < glyphs.size (); ++sheet)
 	{
 		Magick::Image sheetData (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
+
 		Pixels cache (sheetData);
-		for (unsigned y = 0; y < glyphsPerCol; y++)
+		for (unsigned y = 0; y < glyphsPerCol; ++y)
 		{
-			for (unsigned x = 0; x < glyphsPerRow; x++)
+			for (unsigned x = 0; x < glyphsPerRow; ++x)
 			{
 				const unsigned glyphIndex =
 				    sheet * glyphsPerRow * glyphsPerCol + y * glyphsPerRow + x;
@@ -773,7 +787,7 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 				    y * glyphHeight + 1 + ascent - currentGlyph->second.ascent,
 				    Magick::OverCompositeOp);
 
-				currentGlyph++;
+				++currentGlyph;
 			}
 		}
 
@@ -783,25 +797,30 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 	return ret;
 }
 
-Glyph BCFNT::currentGlyphImage (FT_Face face) const
+Glyph BCFNT::currentGlyphImage (std::unique_ptr<freetype::Face> &face) const
 {
 	Glyph ret{Magick::Image (Magick::Geometry (glyphWidth, glyphHeight), transparent ()),
-	    CharWidthInfo{static_cast<std::uint16_t> (face->glyph->metrics.horiBearingX >> 6),
-	        static_cast<std::uint16_t> (face->glyph->metrics.width >> 6),
-	        static_cast<std::uint16_t> (face->glyph->metrics.horiAdvance >> 6)},
+	    CharWidthInfo{static_cast<std::int8_t> ((*face)->glyph->metrics.horiBearingX >> 6),
+	        static_cast<std::uint8_t> ((*face)->glyph->metrics.width >> 6),
+	        static_cast<std::uint8_t> ((*face)->glyph->metrics.horiAdvance >> 6)},
 	    ascent};
+
+	const unsigned width  = (*face)->glyph->bitmap.width;
+	const unsigned height = (*face)->glyph->bitmap.rows;
+	const int yOffset     = ascent - (*face)->glyph->bitmap_top;
+
 	Pixels cache (ret.img);
 	PixelPacket p = cache.get (1, 1, cellWidth, cellHeight);
-	for (unsigned y = 0; y < face->glyph->bitmap.rows; ++y)
+	for (unsigned y = 0; y < height; ++y)
 	{
-		for (unsigned x = 0; x < face->glyph->bitmap.width; ++x)
+		for (unsigned x = 0; x < width; ++x)
 		{
-			const int py = y + (ascent - face->glyph->bitmap_top);
+			const int py = y + yOffset;
 
 			if (x >= cellWidth || py < 0 || py >= cellHeight)
 				continue;
 
-			const std::uint8_t v = face->glyph->bitmap.buffer[y * face->glyph->bitmap.width + x];
+			const std::uint8_t v = (*face)->glyph->bitmap.buffer[y * width + x];
 
 			Magick::Color c;
 			quantumRed (c, bits_to_quantum<8> (0));
@@ -819,40 +838,42 @@ Glyph BCFNT::currentGlyphImage (FT_Face face) const
 
 std::uint16_t BCFNT::codepoint (std::uint16_t index) const
 {
-	std::vector<CMAP>::const_iterator i = cmaps.begin ();
-	std::uint16_t code                  = 0xFFFF;
-	while (code == 0xFFFF && i != cmaps.end ())
+	for (auto &cmap : cmaps)
 	{
-		code = i->codePointFromIndex (index);
-		i++;
+		std::uint16_t code = cmap.codePointFromIndex (index);
+		if (code != 0xFFFF)
+			return code;
 	}
-	return code;
+
+	return 0xFFFF;
 }
 
-void BCFNT::readGlyphImages (std::vector<std::uint8_t>::const_iterator &i, int numSheets)
+void BCFNT::readGlyphImages (std::vector<std::uint8_t>::const_iterator &it, int numSheets)
 {
-	for (int sheet = 0; sheet < numSheets; sheet++)
+	for (int sheet = 0; sheet < numSheets; ++sheet)
 	{
-		Magick::Image sheetData = unpackSheet (i, SHEET_WIDTH, SHEET_HEIGHT);
+		Magick::Image sheetData = unpackSheet (it, SHEET_WIDTH, SHEET_HEIGHT);
+
 		Pixels cache (sheetData);
-		for (unsigned row = 0; row < glyphsPerCol; row++)
+		for (unsigned y = 0; y < glyphsPerCol; ++y)
 		{
-			for (unsigned column = 0; column < glyphsPerRow; column++)
+			for (unsigned x = 0; x < glyphsPerRow; ++x)
 			{
-				PixelPacket glyphData = cache.get (
-				    column * glyphWidth + 1, row * glyphHeight + 1, cellWidth, cellHeight);
+				PixelPacket glyphData =
+				    cache.get (x * glyphWidth + 1, y * glyphHeight + 1, cellWidth, cellHeight);
+
 				Magick::Image glyph (Magick::Geometry (glyphWidth, glyphHeight), transparent ());
+
 				Pixels glyphPixels (glyph);
 				PixelPacket outData = glyphPixels.get (0, 0, cellWidth, cellHeight);
-
-				for (unsigned pixel = 0; pixel < cellWidth * cellHeight; pixel++)
-				{
+				for (unsigned pixel = 0; pixel < cellWidth * cellHeight; ++pixel)
 					outData[pixel] = glyphData[pixel];
-				}
+
 				glyphPixels.sync ();
 
 				const std::uint16_t code =
-				    codepoint (sheet * glyphsPerSheet + row * glyphsPerRow + column);
+				    codepoint (sheet * glyphsPerSheet + y * glyphsPerRow + x);
+
 				if (code != 0xFFFF)
 					glyphs.emplace (code, Glyph{glyph, bcfnt::CharWidthInfo{0, 0, 0}, ascent});
 			}
@@ -863,18 +884,25 @@ void BCFNT::readGlyphImages (std::vector<std::uint8_t>::const_iterator &i, int n
 void BCFNT::refreshCMAPs ()
 {
 	cmaps.clear ();
-	for (auto it = glyphs.begin (); it != glyphs.end (); it++)
+
+	std::uint16_t index = 0;
+	for (const auto &pair : glyphs)
 	{
-		if (cmaps.empty () || cmaps.back ().codeEnd != it->first - 1)
+		const auto &code = pair.first;
+
+		if (cmaps.empty () || cmaps.back ().codeEnd != code - 1)
 		{
 			cmaps.emplace_back ();
-			auto &cmap     = cmaps.back ();
-			cmap.codeBegin = cmap.codeEnd = it->first;
-			cmap.data = future::make_unique<CMAPDirect> (std::distance (glyphs.begin (), it));
-			cmap.mappingMethod = cmap.data->type ();
+			auto &cmap = cmaps.back ();
+
+			cmap.codeBegin = cmap.codeEnd = code;
+			cmap.data                     = future::make_unique<CMAPDirect> (index);
+			cmap.mappingMethod            = cmap.data->type ();
 		}
 		else
-			cmaps.back ().codeEnd = it->first;
+			cmaps.back ().codeEnd = code;
+
+		++index;
 	}
 }
 
@@ -885,13 +913,12 @@ void BCFNT::addFont (BCFNT &other, std::vector<std::uint16_t> &list, bool isBlac
 	    newAscent + std::max (other.cellHeight - other.ascent, cellHeight - ascent);
 	std::uint8_t newCellWidth = std::max (other.cellWidth, cellWidth);
 
-	for (auto &i : other.glyphs)
+	for (const auto &pair : other.glyphs)
 	{
-		if (i.first != 0xFFFF && !glyphs.count (i.first) &&
-		    std::binary_search (list.begin (), list.end (), i.first) != isBlacklist)
-		{
-			glyphs.emplace (i);
-		}
+		const auto &code = pair.first;
+
+		if (code != 0xFFFF && !glyphs.count (code) && allowed (code, list, isBlacklist))
+			glyphs.emplace (pair);
 	}
 
 	refreshCMAPs ();

@@ -23,12 +23,12 @@ tex3ds_SOURCES = source/atlas.cpp \
                  include/swizzle.h
 
 mkbcfnt_SOURCES = source/bcfnt.cpp \
-                  source/ft_error.cpp \
+                  source/freetype.cpp \
                   source/magick_compat.cpp \
                   source/mkbcfnt.cpp \
                   source/swizzle.cpp \
                   include/bcfnt.h \
-                  include/ft_error.h \
+                  include/freetype.h \
                   include/magick_compat.h \
                   include/swizzle.h
 

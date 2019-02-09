@@ -23,10 +23,9 @@
  */
 #pragma once
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
-
+#include "freetype.h"
 #include "magick_compat.h"
+
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -89,13 +88,7 @@ public:
 		return CMAP_TYPE_SCAN;
 	}
 
-	struct Entry
-	{
-		std::uint16_t code;
-		std::uint16_t glyphIndex;
-	};
-
-	std::vector<Entry> entries;
+	std::map<std::uint16_t, std::uint16_t> entries;
 };
 
 /** @brief Font character map structure. */
@@ -127,17 +120,20 @@ public:
 	BCFNT ()
 	{
 	}
+
 	BCFNT (const std::vector<std::uint8_t> &data);
 
 	bool serialize (const std::string &path);
 
-	void addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlacklist);
+	void addFont (std::unique_ptr<freetype::Face> face,
+	    std::vector<std::uint16_t> &list,
+	    bool isBlacklist);
 	void addFont (BCFNT &font, std::vector<std::uint16_t> &list, bool isBlacklist);
 
 private:
 	void readGlyphImages (std::vector<std::uint8_t>::const_iterator &bcfnt, int sheetNum);
 	std::vector<Magick::Image> sheetify ();
-	Glyph currentGlyphImage (FT_Face face) const;
+	Glyph currentGlyphImage (std::unique_ptr<freetype::Face> &face) const;
 	std::uint16_t codepoint (std::uint16_t index) const;
 	void refreshCMAPs ();
 	std::vector<CMAP> cmaps;
@@ -153,11 +149,12 @@ private:
 	std::uint8_t maxWidth = 0;
 	std::uint8_t ascent   = 0;
 
-	std::uint8_t cellWidth     = 0;
-	std::uint8_t cellHeight    = 0;
-	std::uint16_t SHEET_WIDTH  = 256;
-	std::uint16_t SHEET_HEIGHT = 512;
-	std::uint32_t SHEET_SIZE   = 128 * 512;
+	std::uint8_t cellWidth  = 0;
+	std::uint8_t cellHeight = 0;
+
+	std::uint16_t SHEET_WIDTH  = 1024;
+	std::uint16_t SHEET_HEIGHT = 1024;
+	std::uint32_t SHEET_SIZE   = SHEET_WIDTH * SHEET_HEIGHT / 2;
 
 	std::uint16_t glyphWidth     = 0;
 	std::uint16_t glyphHeight    = 0;
