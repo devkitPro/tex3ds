@@ -30,11 +30,14 @@
 #include "quantum.h"
 #include "swizzle.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <limits>
 #include <map>
+#include <thread>
 
 namespace
 {
@@ -72,6 +75,7 @@ Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &data,
     const unsigned HEIGHT)
 {
 	Magick::Image ret (Magick::Geometry (WIDTH, HEIGHT), transparent ());
+	ret.magick ("A");
 
 	Pixels cache (ret);
 	for (unsigned y = 0; y < HEIGHT; y += 8)
@@ -630,9 +634,7 @@ bool BCFNT::serialize (const std::string &path)
 	output.resize (sheetOffset);
 	assert (output.size () == sheetOffset);
 	for (auto sheet : sheetImages)
-	{
 		appendSheet (output, sheet);
-	}
 
 	// CWDH header + data
 	assert (output.size () == cwdhOffset);
@@ -761,38 +763,59 @@ bool BCFNT::serialize (const std::string &path)
 
 std::vector<Magick::Image> BCFNT::sheetify ()
 {
-	std::map<std::uint16_t, bcfnt::Glyph>::iterator currentGlyph = std::begin (glyphs);
-
-	std::vector<Magick::Image> ret;
-
-	for (unsigned sheet = 0; sheet * glyphsPerSheet < glyphs.size (); ++sheet)
+	std::vector<std::map<std::uint16_t, Glyph>::const_iterator> iters;
 	{
-		Magick::Image sheetData (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
-
-		Pixels cache (sheetData);
-		for (unsigned y = 0; y < glyphsPerCol; ++y)
+		auto it = std::begin (glyphs);
+		while (it != std::end (glyphs))
 		{
-			for (unsigned x = 0; x < glyphsPerRow; ++x)
+			iters.emplace_back (it);
+			if (iters.size () == numSheets)
+				break;
+
+			std::advance (it, glyphsPerSheet);
+		}
+	}
+
+	std::vector<Magick::Image> ret (numSheets);
+	std::vector<std::thread> threads;
+	const auto numThreads = std::max (1u, std::thread::hardware_concurrency ());
+
+	std::atomic<std::uint16_t> sheetNum (0);
+	auto buildSheet = [&]() {
+		while (true)
+		{
+			std::uint16_t num = sheetNum++;
+			if (num >= numSheets)
+				return;
+
+			auto &img = ret[num];
+			auto it   = iters[num];
+
+			img = Magick::Image (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
+			img.magick ("A");
+
+			for (unsigned y = 0; y < glyphsPerCol; ++y)
 			{
-				const unsigned glyphIndex =
-				    sheet * glyphsPerRow * glyphsPerCol + y * glyphsPerRow + x;
-				if (glyphIndex >= glyphs.size ())
+				for (unsigned x = 0; x < glyphsPerRow; ++x, ++it)
 				{
-					ret.emplace_back (std::move (sheetData));
-					return ret;
+					if (it == std::end (glyphs))
+						return;
+
+					img.composite (it->second.img,
+					    x * glyphWidth + 1,
+					    y * glyphHeight + 1 + ascent - it->second.ascent,
+					    Magick::OverCompositeOp);
 				}
-
-				sheetData.composite (currentGlyph->second.img,
-				    x * glyphWidth + 1,
-				    y * glyphHeight + 1 + ascent - currentGlyph->second.ascent,
-				    Magick::OverCompositeOp);
-
-				++currentGlyph;
 			}
 		}
+	};
 
-		ret.emplace_back (std::move (sheetData));
-	}
+	for (unsigned i = 0; i < numThreads; ++i)
+		threads.emplace_back (buildSheet);
+
+	for (auto &thread : threads)
+		thread.join ();
+	threads.clear ();
 
 	return ret;
 }
@@ -809,6 +832,7 @@ Glyph BCFNT::currentGlyphImage (std::unique_ptr<freetype::Face> &face) const
 	const unsigned height = (*face)->glyph->bitmap.rows;
 	const int yOffset     = ascent - (*face)->glyph->bitmap_top;
 
+	ret.img.magick ("A");
 	Pixels cache (ret.img);
 	PixelPacket p = cache.get (1, 1, cellWidth, cellHeight);
 	for (unsigned y = 0; y < height; ++y)
@@ -863,6 +887,7 @@ void BCFNT::readGlyphImages (std::vector<std::uint8_t>::const_iterator &it, int 
 				    cache.get (x * glyphWidth + 1, y * glyphHeight + 1, cellWidth, cellHeight);
 
 				Magick::Image glyph (Magick::Geometry (glyphWidth, glyphHeight), transparent ());
+				glyph.magick ("A");
 
 				Pixels glyphPixels (glyph);
 				PixelPacket outData = glyphPixels.get (0, 0, cellWidth, cellHeight);
@@ -935,6 +960,6 @@ void BCFNT::addFont (BCFNT &other, std::vector<std::uint16_t> &list, bool isBlac
 	height         = std::max (height, other.height);
 	width          = std::max (width, other.width);
 	maxWidth       = cellWidth;
-	numSheets      = glyphs.size () / glyphsPerSheet + (glyphs.size () % glyphsPerSheet ? 1 : 0);
+	numSheets      = (glyphs.size () - 1) / glyphsPerSheet + 1;
 }
 }
