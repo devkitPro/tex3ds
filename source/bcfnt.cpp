@@ -289,39 +289,41 @@ std::uint16_t CMAP::codePointFromIndex (std::uint16_t index) const
 	}
 }
 
-BCFNT::BCFNT (std::vector<FT_Face> &faces)
+void BCFNT::addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlacklist)
 {
 	int descent = std::numeric_limits<int>::max ();
 
-	for (auto &face : faces)
+	lineFeed = std::max (lineFeed, static_cast<uint8_t> (face->size->metrics.height >> 6));
+	height   = std::max (height, static_cast<uint8_t> ((face->bbox.yMax - face->bbox.yMin) >> 6));
+	width    = std::max (width, static_cast<uint8_t> ((face->bbox.xMax - face->bbox.xMin) >> 6));
+	maxWidth = std::max (maxWidth, static_cast<uint8_t> (face->size->metrics.max_advance >> 6));
+	ascent   = std::max (ascent, static_cast<uint8_t> (face->size->metrics.ascender >> 6));
+	descent  = std::min (descent, static_cast<int> (face->size->metrics.descender) >> 6);
+
+	// extract mappings from font face
+	FT_UInt faceIndex;
+	FT_ULong code = FT_Get_First_Char (face, &faceIndex);
+	while (faceIndex != 0)
 	{
-		lineFeed = std::max (lineFeed, static_cast<uint8_t> (face->size->metrics.height >> 6));
-		height = std::max (height, static_cast<uint8_t> ((face->bbox.yMax - face->bbox.yMin) >> 6));
-		width  = std::max (width, static_cast<uint8_t> ((face->bbox.xMax - face->bbox.xMin) >> 6));
-		maxWidth = std::max (maxWidth, static_cast<uint8_t> (face->size->metrics.max_advance >> 6));
-		ascent   = std::max (ascent, static_cast<uint8_t> (face->size->metrics.ascender >> 6));
-		descent  = std::min (descent, static_cast<int> (face->size->metrics.descender) >> 6);
-
-		// extract mappings from font face
-		FT_UInt faceIndex;
-		FT_ULong code = FT_Get_First_Char (face, &faceIndex);
-		while (faceIndex != 0)
+		// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
+		if (code >= std::numeric_limits<std::uint16_t>::max () || glyphs.count (code))
 		{
-			// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
-			if (code >= std::numeric_limits<std::uint16_t>::max () || glyphs.count (code))
-			{
-				code = FT_Get_Next_Char (face, code, &faceIndex);
-				continue;
-			}
+			code = FT_Get_Next_Char (face, code, &faceIndex);
+			continue;
+		}
 
-			FT_Error error = FT_Load_Glyph (face, faceIndex, FT_LOAD_RENDER);
-			if (error)
-			{
-				std::fprintf (stderr, "FT_Load_Glyph: %s\n", ft_error (error));
-				code = FT_Get_Next_Char (face, code, &faceIndex);
-				continue;
-			}
+		FT_Error error = FT_Load_Glyph (face, faceIndex, FT_LOAD_RENDER);
+		if (error)
+		{
+			std::fprintf (stderr, "FT_Load_Glyph: %s\n", ft_error (error));
+			code = FT_Get_Next_Char (face, code, &faceIndex);
+			continue;
+		}
 
+		if (std::binary_search (list.begin (), list.end (), static_cast<std::uint16_t> (code)) !=
+		        isBlacklist &&
+		    !glyphs.count (code))
+		{
 			if (face->glyph->bitmap_top > ascent)
 				ascent = face->glyph->bitmap_top;
 
@@ -339,9 +341,9 @@ BCFNT::BCFNT (std::vector<FT_Face> &faces)
 			glyphHeight = cellHeight + 1;
 
 			glyphs.emplace (code, currentGlyphImage (face));
-
-			code = FT_Get_Next_Char (face, code, &faceIndex);
 		}
+
+		code = FT_Get_Next_Char (face, code, &faceIndex);
 	}
 
 	cellWidth      = maxWidth + 1;
@@ -487,7 +489,6 @@ BCFNT::BCFNT (const std::vector<std::uint8_t> &data)
 	i >> in32; // Sheet Offset
 	i = data.begin () + in32;
 	readGlyphImages (i, numSheets);
-	printf ("Glyphs: %i", glyphs.size ());
 
 	while (cwdhOffset != 0)
 	{
@@ -516,11 +517,6 @@ bool BCFNT::serialize (const std::string &path)
 		return false;
 	}
 	std::vector<Magick::Image> sheetImages = sheetify ();
-	for (size_t i = 0; i < sheetImages.size (); i++)
-	{
-		sheetImages[i].magick ("PNG");
-		sheetImages[i].write ("sheet" + std::to_string (i) + ".png");
-	}
 	std::vector<std::uint8_t> output;
 
 	std::uint32_t fileSize = 0;
@@ -882,7 +878,7 @@ void BCFNT::refreshCMAPs ()
 	}
 }
 
-BCFNT &BCFNT::operator+= (const BCFNT &other)
+void BCFNT::addFont (BCFNT &other, std::vector<std::uint16_t> &list, bool isBlacklist)
 {
 	std::uint8_t newAscent = std::max (other.ascent, ascent);
 	std::uint8_t newCellHeight =
@@ -891,7 +887,8 @@ BCFNT &BCFNT::operator+= (const BCFNT &other)
 
 	for (auto &i : other.glyphs)
 	{
-		if (i.first != 0xFFFF && !glyphs.count (i.first))
+		if (i.first != 0xFFFF && !glyphs.count (i.first) &&
+		    std::binary_search (list.begin (), list.end (), i.first) != isBlacklist)
 		{
 			glyphs.emplace (i);
 		}
@@ -912,6 +909,5 @@ BCFNT &BCFNT::operator+= (const BCFNT &other)
 	width          = std::max (width, other.width);
 	maxWidth       = cellWidth;
 	numSheets      = glyphs.size () / glyphsPerSheet + (glyphs.size () % glyphsPerSheet ? 1 : 0);
-	return *this;
 }
 }

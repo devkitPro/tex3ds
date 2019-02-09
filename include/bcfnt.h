@@ -124,12 +124,15 @@ struct Glyph
 class BCFNT
 {
 public:
-	BCFNT (std::vector<FT_Face> &face);
+	BCFNT ()
+	{
+	}
 	BCFNT (const std::vector<std::uint8_t> &data);
 
 	bool serialize (const std::string &path);
 
-	BCFNT &operator+= (const BCFNT &other);
+	void addFont (FT_Face face, std::vector<std::uint16_t> &list, bool isBlacklist);
+	void addFont (BCFNT &font, std::vector<std::uint16_t> &list, bool isBlacklist);
 
 private:
 	void readGlyphImages (std::vector<std::uint8_t>::const_iterator &bcfnt, int sheetNum);

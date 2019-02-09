@@ -29,6 +29,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <set>
 #include <string>
 
 namespace
@@ -62,22 +63,51 @@ void print_usage (const char *prog)
 {
 	std::printf ("Usage: %s [OPTIONS...] <input1> [input2...]\n", prog);
 
-	std::printf ("  Options:\n"
-	             "    -h, --help                   Show this help message\n"
-	             "    -o, --output <output>        Output file\n"
-	             "    -s, --size <size>            Set font size in points\n"
-	             "    -v, --version                Show version and copyright information\n"
-	             "    <inputN>                     Input file(s). Lower, non-BCFNT formatted "
-	             "numbers get priority\n\n");
+	std::printf (
+	    "  Options:\n"
+	    "    -h, --help                   Show this help message\n"
+	    "    -o, --output <output>        Output file\n"
+	    "    -s, --size <size>            Set font size in points\n"
+	    "    -b, --blacklist <file>       Excludes the whitespace-separated list of codepoints\n"
+	    "    -w, --whitelist <file>       Includes only the whitespace-separated list of "
+	    "codepoints\n"
+	    "    -v, --version                Show version and copyright information\n"
+	    "    <inputN>                     Input file(s). Lower numbers get priority\n\n");
+}
+
+void parse_list (std::vector<std::uint16_t> &out, const char *list)
+{
+	FILE *in = std::fopen (list, "r");
+	if (in)
+	{
+		while (!std::feof (in) && !std::ferror (in))
+		{
+			int v;
+			if (std::fscanf (in, "%i", &v) == 1)
+				out.emplace_back (static_cast<std::uint16_t> (v));
+		}
+		if (std::ferror (in))
+		{
+			std::fprintf (stderr, "Error while reading list file %s", list);
+		}
+	}
+	else
+	{
+		std::fprintf (stderr, "Error opening list file %s", list);
+	}
+	std::fclose (in);
+	std::sort (out.begin (), out.end ());
 }
 
 /** @brief Program long options */
 const struct option long_options[] = {
     /* clang-format off */
+	{ "blacklist", required_argument, nullptr, 'b', },
 	{ "help",     no_argument,       nullptr, 'h', },
 	{ "output",   required_argument, nullptr, 'o', },
 	{ "size",     required_argument, nullptr, 's', },
 	{ "version",  no_argument,       nullptr, 'v', },
+	{ "whitelist", required_argument, nullptr, 'w', },
 	{ nullptr,    no_argument,       nullptr,   0, },
     /* clang-format on */
 };
@@ -97,11 +127,13 @@ int main (int argc, char *argv[])
 	std::setvbuf (stderr, nullptr, _IOLBF, 0);
 
 	std::string output_path;
-	int size = 22;
+	std::vector<std::uint16_t> list;
+	bool isBlacklist = true;
+	int size         = 22;
 
 	// parse options
 	int c;
-	while ((c = ::getopt_long (argc, argv, "ho:v", long_options, nullptr)) != -1)
+	while ((c = ::getopt_long (argc, argv, "b:ho:s:vw:", long_options, nullptr)) != -1)
 	{
 		switch (c)
 		{
@@ -128,6 +160,18 @@ int main (int argc, char *argv[])
 			// print version
 			print_version ();
 			return EXIT_SUCCESS;
+
+		case 'b':
+			// set blacklist
+			parse_list (list, optarg);
+			isBlacklist = true;
+			break;
+
+		case 'w':
+			// set whitelist
+			parse_list (list, optarg);
+			isBlacklist = false;
+			break;
 
 		default:
 			print_usage (prog);
@@ -161,8 +205,7 @@ int main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	std::vector<FT_Face> faces;
-	std::vector<bcfnt::BCFNT> bcfnts;
+	auto bcfnt = future::make_unique<bcfnt::BCFNT> ();
 	for (size_t i = 0; i < inputs.size (); i++)
 	{
 		FILE *in = fopen (inputs[i].c_str (), "rb");
@@ -178,7 +221,8 @@ int main (int argc, char *argv[])
 				std::vector<std::uint8_t> data (fileSize);
 				fread (data.data (), 1, fileSize, in);
 				fclose (in);
-				bcfnts.emplace_back (data);
+				bcfnt::BCFNT font (data);
+				bcfnt->addFont (font, list, isBlacklist);
 				continue;
 			}
 		}
@@ -209,19 +253,13 @@ int main (int argc, char *argv[])
 			FT_Done_FreeType (library);
 			return EXIT_FAILURE;
 		}
-		faces.push_back (face);
+
+		bcfnt->addFont (face, list, isBlacklist);
+		FT_Done_Face (face);
 	}
 
-	auto bcfnt = future::make_unique<bcfnt::BCFNT> (faces);
-	for (std::size_t i = 0; i < bcfnts.size (); i++)
-	{
-		*bcfnt += bcfnts[i];
-		// return bcfnts[0].serialize(output_path) ? EXIT_SUCCESS : EXIT_FAILURE;
-	}
 	const int code = bcfnt->serialize (output_path) ? EXIT_SUCCESS : EXIT_FAILURE;
 
-	for (auto &face : faces)
-		FT_Done_Face (face);
 	FT_Done_FreeType (library);
 	return code;
 }
