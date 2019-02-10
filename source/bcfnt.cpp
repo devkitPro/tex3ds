@@ -29,12 +29,12 @@
 #include "future.h"
 #include "quantum.h"
 #include "swizzle.h"
+#include "threadPool.h"
 
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
-#include <future>
 #include <limits>
 #include <map>
 
@@ -51,8 +51,6 @@ void appendSheet (std::vector<std::uint8_t> &data, Magick::Image &sheet)
 
 	const unsigned w = sheet.columns ();
 	const unsigned h = sheet.rows ();
-
-	data.reserve (data.size () + w * h / 2);
 
 	Pixels cache (sheet);
 	for (unsigned y = 0; y < h; y += 8)
@@ -149,7 +147,6 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const char 
 {
 	const std::size_t len = std::strlen (str);
 
-	o.reserve (o.size () + len);
 	o.insert (std::end (o), str, str + len);
 
 	return o;
@@ -164,7 +161,6 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint8_
 
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint16_t v)
 {
-	o.reserve (o.size () + 2);
 	o.emplace_back ((v >> 0) & 0xFF);
 	o.emplace_back ((v >> 8) & 0xFF);
 
@@ -173,7 +169,6 @@ std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint16
 
 std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint32_t v)
 {
-	o.reserve (o.size () + 4);
 	o.emplace_back ((v >> 0) & 0xFF);
 	o.emplace_back ((v >> 8) & 0xFF);
 	o.emplace_back ((v >> 16) & 0xFF);
@@ -579,6 +574,8 @@ bool BCFNT::serialize (const std::string &path)
 		}
 	}
 
+	output.reserve (fileSize);
+
 	// FINF, TGLP, CWDH, CMAPs
 	std::uint32_t numBlocks = 3 + cmaps.size ();
 
@@ -799,9 +796,9 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 		}
 	};
 
-	std::vector<std::future<void>> futures;
+	std::vector<std::shared_future<void>> futures;
 	for (unsigned i = 0; i < numSheets; ++i)
-		futures.emplace_back (std::async (std::launch::async, buildSheet, i));
+		futures.emplace_back (ThreadPool::enqueue (buildSheet, i));
 
 	for (auto &future : futures)
 		future.wait ();

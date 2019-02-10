@@ -27,10 +27,12 @@ mkbcfnt_SOURCES = source/bcfnt.cpp \
                   source/magick_compat.cpp \
                   source/mkbcfnt.cpp \
                   source/swizzle.cpp \
+                  source/threadPool.cpp \
                   include/bcfnt.h \
                   include/freetype.h \
                   include/magick_compat.h \
-                  include/swizzle.h
+                  include/swizzle.h \
+                  include/threadPool.h
 
 LDADD = $(ImageMagick_LIBS)
 AM_CPPFLAGS = -I$(srcdir)/include -D_GNU_SOURCE $(ImageMagick_CFLAGS)
