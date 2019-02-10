@@ -31,13 +31,12 @@
 #include "swizzle.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <future>
 #include <limits>
 #include <map>
-#include <thread>
 
 namespace
 {
@@ -777,45 +776,35 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 	}
 
 	std::vector<Magick::Image> ret (numSheets);
-	std::vector<std::thread> threads;
-	const auto numThreads = std::max (1u, std::thread::hardware_concurrency ());
 
-	std::atomic<std::uint16_t> sheetNum (0);
-	auto buildSheet = [&]() {
-		while (true)
+	auto buildSheet = [&](std::uint16_t num) {
+		auto &img = ret[num];
+		auto it   = iters[num];
+
+		img = Magick::Image (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
+		img.magick ("A");
+
+		for (unsigned y = 0; y < glyphsPerCol; ++y)
 		{
-			std::uint16_t num = sheetNum++;
-			if (num >= numSheets)
-				return;
-
-			auto &img = ret[num];
-			auto it   = iters[num];
-
-			img = Magick::Image (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
-			img.magick ("A");
-
-			for (unsigned y = 0; y < glyphsPerCol; ++y)
+			for (unsigned x = 0; x < glyphsPerRow; ++x, ++it)
 			{
-				for (unsigned x = 0; x < glyphsPerRow; ++x, ++it)
-				{
-					if (it == std::end (glyphs))
-						return;
+				if (it == std::end (glyphs))
+					return;
 
-					img.composite (it->second.img,
-					    x * glyphWidth + 1,
-					    y * glyphHeight + 1 + ascent - it->second.ascent,
-					    Magick::OverCompositeOp);
-				}
+				img.composite (it->second.img,
+				    x * glyphWidth + 1,
+				    y * glyphHeight + 1 + ascent - it->second.ascent,
+				    Magick::OverCompositeOp);
 			}
 		}
 	};
 
-	for (unsigned i = 0; i < numThreads; ++i)
-		threads.emplace_back (buildSheet);
+	std::vector<std::future<void>> futures;
+	for (unsigned i = 0; i < numSheets; ++i)
+		futures.emplace_back (std::async (std::launch::async, buildSheet, i));
 
-	for (auto &thread : threads)
-		thread.join ();
-	threads.clear ();
+	for (auto &future : futures)
+		future.wait ();
 
 	return ret;
 }
