@@ -125,7 +125,7 @@ public:
 
 	bool serialize (const std::string &path);
 
-	void addFont (std::unique_ptr<freetype::Face> face,
+	void addFont (std::shared_ptr<freetype::Face> face,
 	    std::vector<std::uint16_t> &list,
 	    bool isBlacklist);
 	void addFont (BCFNT &font, std::vector<std::uint16_t> &list, bool isBlacklist);
@@ -133,9 +133,9 @@ public:
 private:
 	void readGlyphImages (std::vector<std::uint8_t>::const_iterator &bcfnt, int sheetNum);
 	std::vector<Magick::Image> sheetify ();
-	Glyph currentGlyphImage (std::unique_ptr<freetype::Face> &face) const;
 	std::uint16_t codepoint (std::uint16_t index) const;
 	void refreshCMAPs ();
+
 	std::vector<CMAP> cmaps;
 	// character code and image
 	std::map<std::uint16_t, Glyph> glyphs;

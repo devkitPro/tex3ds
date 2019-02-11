@@ -94,7 +94,7 @@ void ThreadPool::pushJob (std::function<void(void)> &&job)
 	std::unique_lock<std::mutex> lock (mutex);
 
 	// block while there's many outstanding jobs
-	while (jobs.size () > threads.size ())
+	while (jobs.size () > threads.size () * 2)
 		jobTaken.wait (lock);
 
 	jobs.emplace (std::move (job));

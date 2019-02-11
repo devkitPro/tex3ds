@@ -35,6 +35,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <map>
 
@@ -45,7 +46,7 @@ bool allowed (std::uint16_t code, const std::vector<std::uint16_t> &list, bool i
 	return std::binary_search (std::begin (list), std::end (list), code) != isBlacklist;
 }
 
-void appendSheet (std::vector<std::uint8_t> &data, Magick::Image &sheet)
+void appendSheet (std::vector<std::uint8_t>::iterator it, Magick::Image &sheet)
 {
 	swizzle (sheet, false);
 
@@ -60,19 +61,61 @@ void appendSheet (std::vector<std::uint8_t> &data, Magick::Image &sheet)
 			PixelPacket p = cache.get (x, y, 8, 8);
 			for (unsigned i = 0; i < 8 * 8; i += 2)
 			{
-				data.emplace_back ((quantum_to_bits<4> (quantumAlpha (p[i + 1])) << 4) |
-				                   (quantum_to_bits<4> (quantumAlpha (p[i + 0])) << 0));
+				*it++ = (quantum_to_bits<4> (quantumAlpha (p[i + 1])) << 4) |
+				        (quantum_to_bits<4> (quantumAlpha (p[i + 0])) << 0);
 			}
 		}
 	}
 }
 
-Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &data,
+bcfnt::Glyph renderGlyph (FT_Face face, FT_UInt index)
+{
+	if (FT_Load_Glyph (face, index, FT_LOAD_RENDER) != 0)
+		std::abort ();
+
+	bcfnt::Glyph glyph{Magick::Image (),
+	    bcfnt::CharWidthInfo{static_cast<std::int8_t> (face->glyph->metrics.horiBearingX >> 6),
+	        static_cast<std::uint8_t> (face->glyph->metrics.width >> 6),
+	        static_cast<std::uint8_t> (face->glyph->metrics.horiAdvance >> 6)},
+	    static_cast<std::uint8_t> (face->glyph->bitmap_top)};
+
+	const unsigned width  = face->glyph->bitmap.width;
+	const unsigned height = face->glyph->bitmap.rows;
+
+	if (width == 0 || height == 0)
+		return glyph;
+
+	glyph.img = Magick::Image (Magick::Geometry (width, height), transparent ());
+	glyph.img.magick ("A");
+
+	Magick::Color c;
+
+	Pixels cache (glyph.img);
+	PixelPacket out = cache.get (0, 0, width, height);
+	auto in         = face->glyph->bitmap.buffer;
+	for (unsigned y = 0; y < height; ++y)
+	{
+		for (unsigned x = 0; x < width; ++x)
+		{
+			const std::uint8_t v = *in++;
+
+			quantumAlpha (c, bits_to_quantum<8> (v));
+
+			*out++ = c;
+		}
+	}
+
+	return glyph;
+}
+
+Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &it,
     const unsigned WIDTH,
     const unsigned HEIGHT)
 {
 	Magick::Image ret (Magick::Geometry (WIDTH, HEIGHT), transparent ());
 	ret.magick ("A");
+
+	Magick::Color c;
 
 	Pixels cache (ret);
 	for (unsigned y = 0; y < HEIGHT; y += 8)
@@ -82,15 +125,13 @@ Magick::Image unpackSheet (std::vector<std::uint8_t>::const_iterator &data,
 			PixelPacket p = cache.get (x, y, 8, 8);
 			for (unsigned i = 0; i < 8 * 8 / 2; ++i)
 			{
-				Magick::Color opacity;
+				auto data = *it++;
 
-				opacity.alphaQuantum (bits_to_quantum<4> ((*data) & 0xF));
-				p[2 * i].opacity = quantumAlpha (opacity);
+				quantumAlpha (c, bits_to_quantum<4> ((data >> 0) & 0xF));
+				*p++ = c;
 
-				opacity.alphaQuantum (bits_to_quantum<4> (((*data) >> 4) & 0xF));
-				p[2 * i + 1].opacity = quantumAlpha (opacity);
-
-				++data;
+				quantumAlpha (c, bits_to_quantum<4> ((data >> 4) & 0xF));
+				*p++ = c;
 			}
 
 			cache.sync ();
@@ -143,96 +184,101 @@ void coalesceCMAP (std::vector<bcfnt::CMAP> &cmaps)
 	    std::move (scanMap)});
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const char *str)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    const char *str)
 {
-	const std::size_t len = std::strlen (str);
+	while (*str)
+		*it++ = *str++;
 
-	o.insert (std::end (o), str, str + len);
-
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint8_t v)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    std::uint8_t v)
 {
-	o.emplace_back (v);
+	*it++ = v;
 
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint16_t v)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    std::uint16_t v)
 {
-	o.emplace_back ((v >> 0) & 0xFF);
-	o.emplace_back ((v >> 8) & 0xFF);
+	*it++ = (v >> 0) & 0xFF;
+	*it++ = (v >> 8) & 0xFF;
 
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, std::uint32_t v)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    std::uint32_t v)
 {
-	o.emplace_back ((v >> 0) & 0xFF);
-	o.emplace_back ((v >> 8) & 0xFF);
-	o.emplace_back ((v >> 16) & 0xFF);
-	o.emplace_back ((v >> 24) & 0xFF);
+	*it++ = (v >> 0) & 0xFF;
+	*it++ = (v >> 8) & 0xFF;
+	*it++ = (v >> 16) & 0xFF;
+	*it++ = (v >> 24) & 0xFF;
 
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPScan &v)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    const bcfnt::CMAPScan &v)
 {
-	o << static_cast<uint16_t> (v.entries.size ());
+	it << static_cast<uint16_t> (v.entries.size ());
 	for (const auto &pair : v.entries)
-		o << static_cast<uint16_t> (pair.first) << static_cast<uint16_t> (pair.second);
+		it << static_cast<uint16_t> (pair.first) << static_cast<uint16_t> (pair.second);
 
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t> &operator<< (std::vector<std::uint8_t> &o, const bcfnt::CMAPTable &v)
+std::vector<std::uint8_t>::iterator &operator<< (std::vector<std::uint8_t>::iterator &it,
+    const bcfnt::CMAPTable &v)
 {
 	for (const auto &entry : v.table)
-		o << static_cast<uint16_t> (entry);
+		it << static_cast<uint16_t> (entry);
 
 	if (v.table.size () % 2)
-		o << static_cast<uint16_t> (0);
+		it << static_cast<uint16_t> (0);
 
-	return o;
+	return it;
 }
 
-std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
-    std::uint32_t &v)
+std::vector<std::uint8_t>::const_iterator &
+    operator>> (std::vector<std::uint8_t>::const_iterator &it, std::uint32_t &v)
 {
-	v = *i++;
-	v |= *i++ << 8;
-	v |= *i++ << 16;
-	v |= *i++ << 24;
+	v = *it++;
+	v |= *it++ << 8;
+	v |= *it++ << 16;
+	v |= *it++ << 24;
 
-	return i;
+	return it;
 }
 
-std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
-    std::uint16_t &v)
+std::vector<std::uint8_t>::const_iterator &
+    operator>> (std::vector<std::uint8_t>::const_iterator &it, std::uint16_t &v)
 {
-	v = *i++;
-	v |= *i++ << 8;
+	v = *it++;
+	v |= *it++ << 8;
 
-	return i;
+	return it;
 }
 
-std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
-    std::uint8_t &v)
+std::vector<std::uint8_t>::const_iterator &
+    operator>> (std::vector<std::uint8_t>::const_iterator &it, std::uint8_t &v)
 {
-	v = *i++;
+	v = *it++;
 
-	return i;
+	return it;
 }
 
-std::vector<std::uint8_t>::const_iterator &operator>> (std::vector<std::uint8_t>::const_iterator &i,
-    bcfnt::CharWidthInfo &v)
+std::vector<std::uint8_t>::const_iterator &
+    operator>> (std::vector<std::uint8_t>::const_iterator &it, bcfnt::CharWidthInfo &v)
 {
-	v.left       = *i++;
-	v.glyphWidth = *i++;
-	v.charWidth  = *i++;
+	v.left       = *it++;
+	v.glyphWidth = *it++;
+	v.charWidth  = *it++;
 
-	return i;
+	return it;
 }
 }
 
@@ -286,60 +332,70 @@ std::uint16_t CMAP::codePointFromIndex (std::uint16_t index) const
 	}
 }
 
-void BCFNT::addFont (std::unique_ptr<freetype::Face> face,
+void BCFNT::addFont (std::shared_ptr<freetype::Face> face_,
     std::vector<std::uint16_t> &list,
     bool isBlacklist)
 {
+	auto face   = face_->getFace ();
 	int descent = std::numeric_limits<int>::max ();
 
-	lineFeed = std::max (lineFeed, static_cast<std::uint8_t> ((*face)->size->metrics.height >> 6));
-	height   = std::max (
-        height, static_cast<std::uint8_t> (((*face)->bbox.yMax - (*face)->bbox.yMin) >> 6));
-	width = std::max (
-	    width, static_cast<std::uint8_t> (((*face)->bbox.xMax - (*face)->bbox.xMin) >> 6));
+	lineFeed = std::max (lineFeed, static_cast<std::uint8_t> (face->size->metrics.height >> 6));
+	height =
+	    std::max (height, static_cast<std::uint8_t> ((face->bbox.yMax - face->bbox.yMin) >> 6));
+	width = std::max (width, static_cast<std::uint8_t> ((face->bbox.xMax - face->bbox.xMin) >> 6));
 	maxWidth =
-	    std::max (maxWidth, static_cast<std::uint8_t> ((*face)->size->metrics.max_advance >> 6));
-	ascent  = std::max (ascent, static_cast<std::uint8_t> ((*face)->size->metrics.ascender >> 6));
-	descent = std::min (descent, static_cast<int> ((*face)->size->metrics.descender) >> 6);
+	    std::max (maxWidth, static_cast<std::uint8_t> (face->size->metrics.max_advance >> 6));
+	ascent  = std::max (ascent, static_cast<std::uint8_t> (face->size->metrics.ascender >> 6));
+	descent = std::min (descent, static_cast<int> (face->size->metrics.descender) >> 6);
+
+	std::vector<std::shared_future<void>> futures;
+	std::mutex mutex;
 
 	// extract mappings from font face
 	FT_UInt faceIndex;
-	FT_ULong code = face->getFirstChar (faceIndex);
+	FT_ULong code = FT_Get_First_Char (face, &faceIndex);
 	while (faceIndex != 0)
 	{
 		// only supports 16-bit code points; also 0xFFFF is explicitly a non-character
 		if (code >= std::numeric_limits<std::uint16_t>::max () || glyphs.count (code))
 		{
-			code = face->getNextChar (code, faceIndex);
+			code = FT_Get_Next_Char (face, code, &faceIndex);
 			continue;
 		}
 
-		FT_Error error = face->loadGlyph (faceIndex, FT_LOAD_RENDER);
+		FT_Error error = FT_Load_Glyph (face, faceIndex, FT_LOAD_DEFAULT);
 		if (error)
 		{
-			code = face->getNextChar (code, faceIndex);
+			std::fprintf (stderr, "FT_Load_Glyph: %s\n", freetype::strerror (error));
+
+			code = FT_Get_Next_Char (face, code, &faceIndex);
 			continue;
 		}
 
 		if (allowed (code, list, isBlacklist) && !glyphs.count (code))
 		{
-			ascent = std::max<int> (ascent, (*face)->glyph->bitmap_top);
+			auto job = [=, &mutex, &face_, &descent]() {
+				auto face  = face_->getFace ();
+				auto glyph = renderGlyph (face, faceIndex);
 
-			descent =
-			    std::min<int> (descent, (*face)->glyph->bitmap_top - (*face)->glyph->bitmap.rows);
+				std::unique_lock<std::mutex> lock (mutex);
 
-			maxWidth = std::max<std::uint8_t> (maxWidth, (*face)->glyph->bitmap.width);
+				ascent = std::max<int> (ascent, face->glyph->bitmap_top);
+				descent =
+				    std::min<int> (descent, face->glyph->bitmap_top - face->glyph->bitmap.rows);
+				maxWidth = std::max<std::uint8_t> (maxWidth, face->glyph->bitmap.width);
 
-			cellWidth   = maxWidth + 1;
-			cellHeight  = ascent - descent;
-			glyphWidth  = cellWidth + 1;
-			glyphHeight = cellHeight + 1;
+				glyphs.emplace (code, glyph);
+			};
 
-			glyphs.emplace (code, currentGlyphImage (face));
+			futures.emplace_back (ThreadPool::enqueue (job));
 		}
 
-		code = face->getNextChar (code, faceIndex);
+		code = FT_Get_Next_Char (face, code, &faceIndex);
 	}
+
+	for (auto &future : futures)
+		future.wait ();
 
 	if (glyphs.empty ())
 		return;
@@ -427,7 +483,9 @@ BCFNT::BCFNT (const std::vector<std::uint8_t> &data)
 		input >> cmapOffset;
 
 		assert (cmap.codeEnd >= cmap.codeBegin);
+#ifndef NDEBUG
 		const std::uint16_t numCodes = cmap.codeEnd - cmap.codeBegin + 1;
+#endif
 
 		switch (cmap.mappingMethod)
 		{
@@ -526,13 +584,17 @@ bool BCFNT::serialize (const std::string &path)
 		std::fprintf (stderr, "Empty font\n");
 		return false;
 	}
+
 	std::vector<Magick::Image> sheetImages = sheetify ();
+
 	std::vector<std::uint8_t> output;
 
 	std::uint32_t fileSize = 0;
 	fileSize += 0x14; // CFNT header
 
+#ifndef NDEBUG
 	const std::uint32_t finfOffset = fileSize;
+#endif
 	fileSize += 0x20; // FINF header
 
 	const std::uint32_t tglpOffset = fileSize;
@@ -574,86 +636,100 @@ bool BCFNT::serialize (const std::string &path)
 		}
 	}
 
-	output.reserve (fileSize);
+	output.resize (fileSize);
+	auto it = std::begin (output);
 
 	// FINF, TGLP, CWDH, CMAPs
 	std::uint32_t numBlocks = 3 + cmaps.size ();
 
 	// CFNT header
-	output << "CFNT"                                  // magic
-	       << static_cast<std::uint16_t> (0xFEFF)     // byte-order-mark
-	       << static_cast<std::uint16_t> (0x14)       // header size
-	       << static_cast<std::uint8_t> (0x0)         // version (?)
-	       << static_cast<std::uint8_t> (0x0)         // version (?)
-	       << static_cast<std::uint8_t> (0x0)         // version (?)
-	       << static_cast<std::uint8_t> (0x3)         // version
-	       << static_cast<std::uint32_t> (fileSize)   // file size
-	       << static_cast<std::uint32_t> (numBlocks); // number of blocks
+	it << "CFNT"                                  // magic
+	   << static_cast<std::uint16_t> (0xFEFF)     // byte-order-mark
+	   << static_cast<std::uint16_t> (0x14)       // header size
+	   << static_cast<std::uint8_t> (0x0)         // version (?)
+	   << static_cast<std::uint8_t> (0x0)         // version (?)
+	   << static_cast<std::uint8_t> (0x0)         // version (?)
+	   << static_cast<std::uint8_t> (0x3)         // version
+	   << static_cast<std::uint32_t> (fileSize)   // file size
+	   << static_cast<std::uint32_t> (numBlocks); // number of blocks
 
 	// FINF header
-	assert (output.size () == finfOffset);
-	output << "FINF"                                              // magic
-	       << static_cast<std::uint32_t> (0x20)                   // section size
-	       << static_cast<std::uint8_t> (0x1)                     // font type
-	       << static_cast<std::uint8_t> (lineFeed)                // line feed
-	       << static_cast<std::uint16_t> (altIndex)               // alternate char index
-	       << static_cast<std::uint8_t> (defaultWidth.left)       // default width (left)
-	       << static_cast<std::uint8_t> (defaultWidth.glyphWidth) // default width (glyph width)
-	       << static_cast<std::uint8_t> (defaultWidth.charWidth)  // default width (char width)
-	       << static_cast<std::uint8_t> (0x1)                     // encoding
-	       << static_cast<std::uint32_t> (tglpOffset + 8)         // TGLP offset
-	       << static_cast<std::uint32_t> (cwdhOffset + 8)         // CWDH offset
-	       << static_cast<std::uint32_t> (cmapOffset + 8)         // CMAP offset
-	       << static_cast<std::uint8_t> (height)                  // font height
-	       << static_cast<std::uint8_t> (width)                   // font width
-	       << static_cast<std::uint8_t> (ascent)                  // font ascent
-	       << static_cast<std::uint8_t> (0x0);                    // padding
+	assert (std::distance (std::begin (output), it) == finfOffset);
+	it << "FINF"                                              // magic
+	   << static_cast<std::uint32_t> (0x20)                   // section size
+	   << static_cast<std::uint8_t> (0x1)                     // font type
+	   << static_cast<std::uint8_t> (lineFeed)                // line feed
+	   << static_cast<std::uint16_t> (altIndex)               // alternate char index
+	   << static_cast<std::uint8_t> (defaultWidth.left)       // default width (left)
+	   << static_cast<std::uint8_t> (defaultWidth.glyphWidth) // default width (glyph width)
+	   << static_cast<std::uint8_t> (defaultWidth.charWidth)  // default width (char width)
+	   << static_cast<std::uint8_t> (0x1)                     // encoding
+	   << static_cast<std::uint32_t> (tglpOffset + 8)         // TGLP offset
+	   << static_cast<std::uint32_t> (cwdhOffset + 8)         // CWDH offset
+	   << static_cast<std::uint32_t> (cmapOffset + 8)         // CMAP offset
+	   << static_cast<std::uint8_t> (height)                  // font height
+	   << static_cast<std::uint8_t> (width)                   // font width
+	   << static_cast<std::uint8_t> (ascent)                  // font ascent
+	   << static_cast<std::uint8_t> (0x0);                    // padding
 
 	// TGLP header
-	assert (output.size () == tglpOffset);
-	output << "TGLP"                                    // magic
-	       << static_cast<std::uint32_t> (0x20)         // section size
-	       << static_cast<std::uint8_t> (cellWidth)     // cell width
-	       << static_cast<std::uint8_t> (cellHeight)    // cell height
-	       << static_cast<std::uint8_t> (ascent)        // cell baseline
-	       << static_cast<std::uint8_t> (maxWidth)      // max character width
-	       << static_cast<std::uint32_t> (SHEET_SIZE)   // sheet data size
-	       << static_cast<std::uint16_t> (numSheets)    // number of sheets
-	       << static_cast<std::uint16_t> (0xB)          // 4-bit alpha format
-	       << static_cast<std::uint16_t> (glyphsPerRow) // num columns
-	       << static_cast<std::uint16_t> (glyphsPerCol) // num rows
-	       << static_cast<std::uint16_t> (SHEET_WIDTH)  // sheet width
-	       << static_cast<std::uint16_t> (SHEET_HEIGHT) // sheet height
-	       << static_cast<std::uint32_t> (sheetOffset); // sheet data offset
+	assert (std::distance (std::begin (output), it) == tglpOffset);
+	it << "TGLP"                                    // magic
+	   << static_cast<std::uint32_t> (0x20)         // section size
+	   << static_cast<std::uint8_t> (cellWidth)     // cell width
+	   << static_cast<std::uint8_t> (cellHeight)    // cell height
+	   << static_cast<std::uint8_t> (ascent)        // cell baseline
+	   << static_cast<std::uint8_t> (maxWidth)      // max character width
+	   << static_cast<std::uint32_t> (SHEET_SIZE)   // sheet data size
+	   << static_cast<std::uint16_t> (numSheets)    // number of sheets
+	   << static_cast<std::uint16_t> (0xB)          // 4-bit alpha format
+	   << static_cast<std::uint16_t> (glyphsPerRow) // num columns
+	   << static_cast<std::uint16_t> (glyphsPerCol) // num rows
+	   << static_cast<std::uint16_t> (SHEET_WIDTH)  // sheet width
+	   << static_cast<std::uint16_t> (SHEET_HEIGHT) // sheet height
+	   << static_cast<std::uint32_t> (sheetOffset); // sheet data offset
 
-	assert (output.size () <= sheetOffset);
-	output.resize (sheetOffset);
-	assert (output.size () == sheetOffset);
-	for (auto sheet : sheetImages)
-		appendSheet (output, sheet);
+	assert (std::distance (std::begin (output), it) <= sheetOffset);
+	it = std::next (std::begin (output), sheetOffset);
+
+	assert (std::distance (std::begin (output), it) == sheetOffset);
+
+	std::vector<std::shared_future<void>> futures;
+
+	for (auto &sheet : sheetImages)
+	{
+		auto job = [&, it]() { appendSheet (it, sheet); };
+
+		futures.emplace_back (ThreadPool::enqueue (job));
+
+		std::advance (it, SHEET_SIZE);
+	}
+
+	for (auto &future : futures)
+		future.wait ();
 
 	// CWDH header + data
-	assert (output.size () == cwdhOffset);
+	assert (std::distance (std::begin (output), it) == cwdhOffset);
 
-	output << "CWDH"                                                              // magic
-	       << static_cast<std::uint32_t> (0x10 + ((3 * glyphs.size () + 3) & ~3)) // section size
-	       << static_cast<std::uint16_t> (0)                                      // start index
-	       << static_cast<std::uint16_t> (glyphs.size ())                         // end index
-	       << static_cast<std::uint32_t> (0); // next CWDH offset
+	it << "CWDH"                                                              // magic
+	   << static_cast<std::uint32_t> (0x10 + ((3 * glyphs.size () + 3) & ~3)) // section size
+	   << static_cast<std::uint16_t> (0)                                      // start index
+	   << static_cast<std::uint16_t> (glyphs.size ())                         // end index
+	   << static_cast<std::uint32_t> (0);                                     // next CWDH offset
 
 	for (const auto &info : glyphs)
 	{
-		output << static_cast<std::uint8_t> (info.second.info.left)
-		       << static_cast<std::uint8_t> (info.second.info.glyphWidth)
-		       << static_cast<std::uint8_t> (info.second.info.charWidth);
+		it << static_cast<std::uint8_t> (info.second.info.left)
+		   << static_cast<std::uint8_t> (info.second.info.glyphWidth)
+		   << static_cast<std::uint8_t> (info.second.info.charWidth);
 	}
 
-	while (output.size () & 0x3)
-		output << static_cast<std::uint8_t> (0);
+	while (std::distance (std::begin (output), it) & 0x3)
+		it << static_cast<std::uint8_t> (0);
 
 	for (const auto &cmap : cmaps)
 	{
-		assert (output.size () == cmapOffset);
+		assert (std::distance (std::begin (output), it) == cmapOffset);
 
 		std::uint32_t size;
 		switch (cmap.mappingMethod)
@@ -675,41 +751,41 @@ bool BCFNT::serialize (const std::string &path)
 			std::abort ();
 		}
 
-		output << "CMAP"                                          // magic
-		       << static_cast<std::uint32_t> (size)               // section size
-		       << static_cast<std::uint16_t> (cmap.codeBegin)     // code begin
-		       << static_cast<std::uint16_t> (cmap.codeEnd)       // code end
-		       << static_cast<std::uint16_t> (cmap.mappingMethod) // mapping method
-		       << static_cast<std::uint16_t> (0x0);               // padding
+		it << "CMAP"                                          // magic
+		   << static_cast<std::uint32_t> (size)               // section size
+		   << static_cast<std::uint16_t> (cmap.codeBegin)     // code begin
+		   << static_cast<std::uint16_t> (cmap.codeEnd)       // code end
+		   << static_cast<std::uint16_t> (cmap.mappingMethod) // mapping method
+		   << static_cast<std::uint16_t> (0x0);               // padding
 
 		// next CMAP offset
 		if (&cmap == &cmaps.back ())
-			output << static_cast<std::uint32_t> (0);
+			it << static_cast<std::uint32_t> (0);
 		else
-			output << static_cast<std::uint32_t> (cmapOffset + size + 8);
+			it << static_cast<std::uint32_t> (cmapOffset + size + 8);
 
 		switch (cmap.mappingMethod)
 		{
 		case CMAPData::CMAP_TYPE_DIRECT:
 		{
 			const auto &direct = dynamic_cast<const CMAPDirect &> (*cmap.data);
-			output << static_cast<std::uint16_t> (direct.offset);
-			output << static_cast<std::uint16_t> (0); // alignment
+			it << static_cast<std::uint16_t> (direct.offset);
+			it << static_cast<std::uint16_t> (0); // alignment
 			break;
 		}
 
 		case CMAPData::CMAP_TYPE_TABLE:
 		{
 			const auto &table = dynamic_cast<const CMAPTable &> (*cmap.data);
-			output << table;
+			it << table;
 			break;
 		}
 
 		case CMAPData::CMAP_TYPE_SCAN:
 		{
 			const auto &scan = dynamic_cast<const CMAPScan &> (*cmap.data);
-			output << scan;
-			output << static_cast<std::uint16_t> (0); // alignment
+			it << scan;
+			it << static_cast<std::uint16_t> (0); // alignment
 			break;
 		}
 
@@ -721,6 +797,8 @@ bool BCFNT::serialize (const std::string &path)
 	}
 
 	assert (output.size () == fileSize);
+	assert (std::distance (std::begin (output), it) == fileSize);
+	assert (it == std::end (output));
 
 	FILE *fp = std::fopen (path.c_str (), "wb");
 	if (!fp)
@@ -772,14 +850,14 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 		}
 	}
 
-	std::vector<Magick::Image> ret (numSheets);
+	std::vector<Magick::Image> sheets (numSheets);
 
 	auto buildSheet = [&](std::uint16_t num) {
-		auto &img = ret[num];
-		auto it   = iters[num];
+		auto &sheet = sheets[num];
+		auto it     = iters[num];
 
-		img = Magick::Image (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
-		img.magick ("A");
+		sheet = Magick::Image (Magick::Geometry (SHEET_WIDTH, SHEET_HEIGHT), transparent ());
+		sheet.magick ("A");
 
 		for (unsigned y = 0; y < glyphsPerCol; ++y)
 		{
@@ -788,7 +866,11 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 				if (it == std::end (glyphs))
 					return;
 
-				img.composite (it->second.img,
+				auto &glyph = it->second.img;
+				if (glyph.rows () == 0 || glyph.columns () == 0)
+					continue;
+
+				sheet.composite (glyph,
 				    x * glyphWidth + 1,
 				    y * glyphHeight + 1 + ascent - it->second.ascent,
 				    Magick::OverCompositeOp);
@@ -803,47 +885,7 @@ std::vector<Magick::Image> BCFNT::sheetify ()
 	for (auto &future : futures)
 		future.wait ();
 
-	return ret;
-}
-
-Glyph BCFNT::currentGlyphImage (std::unique_ptr<freetype::Face> &face) const
-{
-	Glyph ret{Magick::Image (Magick::Geometry (glyphWidth, glyphHeight), transparent ()),
-	    CharWidthInfo{static_cast<std::int8_t> ((*face)->glyph->metrics.horiBearingX >> 6),
-	        static_cast<std::uint8_t> ((*face)->glyph->metrics.width >> 6),
-	        static_cast<std::uint8_t> ((*face)->glyph->metrics.horiAdvance >> 6)},
-	    ascent};
-
-	const unsigned width  = (*face)->glyph->bitmap.width;
-	const unsigned height = (*face)->glyph->bitmap.rows;
-	const int yOffset     = ascent - (*face)->glyph->bitmap_top;
-
-	ret.img.magick ("A");
-	Pixels cache (ret.img);
-	PixelPacket p = cache.get (1, 1, cellWidth, cellHeight);
-	for (unsigned y = 0; y < height; ++y)
-	{
-		for (unsigned x = 0; x < width; ++x)
-		{
-			const int py = y + yOffset;
-
-			if (x >= cellWidth || py < 0 || py >= cellHeight)
-				continue;
-
-			const std::uint8_t v = (*face)->glyph->bitmap.buffer[y * width + x];
-
-			Magick::Color c;
-			quantumRed (c, bits_to_quantum<8> (0));
-			quantumGreen (c, bits_to_quantum<8> (0));
-			quantumBlue (c, bits_to_quantum<8> (0));
-			quantumAlpha (c, bits_to_quantum<8> (v));
-
-			p[py * cellWidth + x] = c;
-		}
-	}
-	cache.sync ();
-
-	return ret;
+	return sheets;
 }
 
 std::uint16_t BCFNT::codepoint (std::uint16_t index) const

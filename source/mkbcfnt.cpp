@@ -253,16 +253,8 @@ int main (int argc, char *argv[])
 			// not BCFNT; try loading with freetype
 			std::fclose (fp);
 
-			auto face = freetype::Face::makeFace (library, input, 0);
+			auto face = freetype::Face::makeFace (library, input, ptSize);
 			if (!face)
-				return EXIT_FAILURE;
-
-			FT_Error error = face->selectCharmap (FT_ENCODING_UNICODE);
-			if (error)
-				return EXIT_FAILURE;
-
-			error = face->setCharSize (ptSize);
-			if (error)
 				return EXIT_FAILURE;
 
 			bcfnt->addFont (std::move (face), list, isBlacklist);

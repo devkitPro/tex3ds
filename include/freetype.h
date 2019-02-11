@@ -26,8 +26,11 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 namespace freetype
 {
@@ -40,34 +43,35 @@ public:
 
 	FT_Library library () const;
 
+	std::unique_lock<std::mutex> lock ();
+
 private:
 	Library ();
 
+	std::mutex m_mutex;
 	FT_Library m_library;
 };
 
-class Face
+class Face : public std::enable_shared_from_this<Face>
 {
 public:
 	~Face ();
 
-	static std::unique_ptr<Face>
-	    makeFace (std::shared_ptr<Library> library, const std::string &path, FT_Long index);
+	static std::shared_ptr<Face>
+	    makeFace (std::shared_ptr<Library> library, const std::string &path, double ptSize);
 
-	FT_Face operator-> ();
-
-	FT_ULong getFirstChar (FT_UInt &faceIndex);
-	FT_ULong getNextChar (FT_ULong charCode, FT_UInt &faceIndex);
-	FT_Error loadGlyph (FT_UInt glyphIndex, FT_Int32 loadFlags);
-
-	FT_Error selectCharmap (FT_Encoding encoding);
-	FT_Error setCharSize (double ptSize);
+	FT_Face getFace ();
 
 private:
-	Face ();
+	Face (const std::string &path, double ptSize);
+
+	const std::string m_path;
+	const double m_ptSize;
 
 	std::shared_ptr<Library> m_library;
-	FT_Face m_face;
+
+	std::mutex m_mutex;
+	std::map<std::thread::id, FT_Face> m_face;
 };
 
 const char *strerror (FT_Error error);

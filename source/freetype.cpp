@@ -56,75 +56,79 @@ FT_Library Library::library () const
 	return m_library;
 }
 
+std::unique_lock<std::mutex> Library::lock ()
+{
+	return std::unique_lock<std::mutex> (m_mutex);
+}
+
 ///////////////////////////////////////////////////////////////////////////
 Face::~Face ()
 {
-	if (m_face)
-		FT_Done_Face (m_face);
+	for (auto &pair : m_face)
+	{
+		auto &face = pair.second;
+		if (face)
+			FT_Done_Face (face);
+	}
 }
 
-Face::Face () : m_library (), m_face ()
+Face::Face (const std::string &path, double ptSize)
+    : m_path (path), m_ptSize (ptSize), m_library (), m_face ()
 {
 }
 
-std::unique_ptr<Face>
-    Face::makeFace (std::shared_ptr<Library> library, const std::string &path, FT_Long index)
+std::shared_ptr<Face>
+    Face::makeFace (std::shared_ptr<Library> library, const std::string &path, double ptSize)
 {
-	auto face = std::unique_ptr<Face> ();
-	face.reset (new Face ());
+	auto face = std::shared_ptr<Face> ();
+	face.reset (new Face (path, ptSize));
 
-	face->m_library = std::move (library);
+	face->m_library = library;
+	if (!face->getFace ())
+		return nullptr;
 
-	FT_Error error = FT_New_Face (face->m_library->library (), path.c_str (), index, &face->m_face);
+	return face;
+}
+
+FT_Face Face::getFace ()
+{
+	auto id = std::this_thread::get_id ();
+	std::unique_lock<std::mutex> lock (m_mutex);
+	auto &face = m_face[id];
+	lock.unlock ();
+
+	if (face)
+		return face;
+
+	FT_Error error;
+	{
+		auto libraryLock = m_library->lock ();
+		error            = FT_New_Face (m_library->library (), m_path.c_str (), 0, &face);
+	}
+
 	if (error)
 	{
 		std::fprintf (stderr, "FT_New_Face: %s\n", freetype::strerror (error));
 		return nullptr;
 	}
 
-	return face;
-}
-
-FT_Face Face::operator-> ()
-{
-	return m_face;
-}
-
-FT_ULong Face::getFirstChar (FT_UInt &faceIndex)
-{
-	return FT_Get_First_Char (m_face, &faceIndex);
-}
-
-FT_ULong Face::getNextChar (FT_ULong charCode, FT_UInt &faceIndex)
-{
-	return FT_Get_Next_Char (m_face, charCode, &faceIndex);
-}
-
-FT_Error Face::loadGlyph (FT_UInt glyphIndex, FT_Int32 loadFlags)
-{
-	FT_Error error = FT_Load_Glyph (m_face, glyphIndex, loadFlags);
+	error = FT_Select_Charmap (face, FT_ENCODING_UNICODE);
 	if (error)
-		std::fprintf (stderr, "FT_Load_Glyph: %s\n", freetype::strerror (error));
-
-	return error;
-}
-
-FT_Error Face::selectCharmap (FT_Encoding encoding)
-{
-	FT_Error error = FT_Select_Charmap (m_face, encoding);
-	if (error)
+	{
 		std::fprintf (stderr, "FT_Select_Charmap: %s\n", freetype::strerror (error));
+		face = nullptr;
+		return nullptr;
+	}
 
-	return error;
-}
-
-FT_Error Face::setCharSize (double ptSize)
-{
-	FT_Error error = FT_Set_Char_Size (m_face, ptSize * (1 << 6), 0, 96, 0);
+	error = FT_Set_Char_Size (face, m_ptSize * (1 << 6), 0, 96, 0);
 	if (error)
+	{
 		std::fprintf (stderr, "FT_Set_Char_Size: %s\n", freetype::strerror (error));
+		face = nullptr;
+		return nullptr;
+	}
 
-	return error;
+	return face;
 }
 
 ///////////////////////////////////////////////////////////////////////////
