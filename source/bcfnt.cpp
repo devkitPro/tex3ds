@@ -292,10 +292,10 @@ std::uint16_t CMAP::codePointFromIndex (std::uint16_t index) const
 	{
 		CMAPDirect &direct = dynamic_cast<CMAPDirect &> (*data);
 
-		if (index < codeBegin + direct.offset)
+		if (index < direct.offset)
 			return 0xFFFF;
 
-		if (index > codeEnd + direct.offset)
+		if (index > codeEnd - codeBegin + direct.offset)
 			return 0xFFFF;
 
 		return codeBegin + index - direct.offset;
