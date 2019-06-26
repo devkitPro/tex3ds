@@ -16,6 +16,7 @@ tex3ds_SOURCES = source/atlas.cpp \
                  include/atlas.h \
                  include/compress.h \
                  include/encode.h \
+                 include/future.h \
                  include/magick_compat.h \
                  include/quantum.h \
                  include/rg_etc1.h \
@@ -30,6 +31,7 @@ mkbcfnt_SOURCES = source/bcfnt.cpp \
                   source/threadPool.cpp \
                   include/bcfnt.h \
                   include/freetype.h \
+                  include/future.h \
                   include/magick_compat.h \
                   include/swizzle.h \
                   include/threadPool.h
