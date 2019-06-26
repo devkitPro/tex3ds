@@ -34,11 +34,12 @@ mkbcfnt_SOURCES = source/bcfnt.cpp \
                   include/swizzle.h \
                   include/threadPool.h
 
-LDADD = $(ImageMagick_LIBS)
-AM_CPPFLAGS = -I$(srcdir)/include -D_GNU_SOURCE $(ImageMagick_CFLAGS)
+AM_CXXFLAGS = -I$(srcdir)/include -D_GNU_SOURCE $(ImageMagick_CFLAGS)
 
-mkbcfnt_LDADD = $(FreeType_LIBS) $(LDADD)
-mkbcfnt_CPPFLAGS = $(FreeType_CFLAGS) $(AM_CPPFLAGS)
+tex3ds_LDADD = $(ImageMagick_LIBS)
+
+mkbcfnt_LDADD = $(FreeType_LIBS) $(ImageMagick_LIBS)
+mkbcfnt_CXXFLAGS = $(FreeType_CFLAGS) $(AM_CXXFLAGS)
 
 EXTRA_DIST = autogen.sh
 
