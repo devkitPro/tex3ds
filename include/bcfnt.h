@@ -52,6 +52,8 @@ public:
 	};
 
 	virtual Type type () const = 0;
+
+	virtual ~CMAPData() = default;
 };
 
 class CMAPDirect : public CMAPData
