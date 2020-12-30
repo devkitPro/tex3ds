@@ -78,7 +78,7 @@ bcfnt::Glyph renderGlyph (FT_Face face, FT_UInt index)
 	    bcfnt::CharWidthInfo{static_cast<std::int8_t> (face->glyph->metrics.horiBearingX >> 6),
 	        static_cast<std::uint8_t> (face->glyph->metrics.width >> 6),
 	        static_cast<std::uint8_t> (face->glyph->metrics.horiAdvance >> 6)},
-	    static_cast<std::uint8_t> (face->glyph->bitmap_top)};
+	    	face->glyph->bitmap_top};
 
 	const unsigned width  = face->glyph->bitmap.width;
 	const unsigned height = face->glyph->bitmap.rows;
@@ -402,7 +402,7 @@ void BCFNT::addFont (std::shared_ptr<freetype::Face> face_,
 		return;
 
 	cellWidth      = maxWidth + 1;
-	cellHeight     = ascent - descent;
+	cellHeight     = std::max<int> (cellHeight, ascent - descent);
 	glyphWidth     = cellWidth + 1;
 	glyphHeight    = cellHeight + 1;
 	glyphsPerRow   = SHEET_WIDTH / glyphWidth;
