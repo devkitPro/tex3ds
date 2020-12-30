@@ -113,7 +113,7 @@ struct Glyph
 {
 	Magick::Image img;
 	CharWidthInfo info;
-	std::uint8_t ascent;
+	int ascent;
 };
 
 class BCFNT
