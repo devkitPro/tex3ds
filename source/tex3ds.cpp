@@ -1700,10 +1700,12 @@ int main (int argc, char *argv[])
 				// shift all subimages by 1,1 and use Po2 size for divisor
 				for (auto &sub : subimage_data)
 				{
-					sub.left   = (sub.left * (atlas.img.columns()) + 1) / output_width;
-					sub.right  = (sub.right * (atlas.img.columns()) + 1) / output_width;
-					sub.bottom = (sub.bottom * (atlas.img.rows()) - 1) / output_height;
-					sub.top    = (sub.top * (atlas.img.rows()) - 1) / output_height;
+					size_t po2_width = potCeil(atlas.img.columns());
+					size_t po2_height = potCeil(atlas.img.rows());
+					sub.left   = (sub.left * (atlas.img.columns()) + 1) / pot_width;
+					sub.right  = (sub.right * (atlas.img.columns()) + 1) / pot_width;
+					sub.bottom = (sub.bottom * (atlas.img.rows()) - 1) / pot_height;
+					sub.top    = (sub.top * (atlas.img.rows()) - 1) / pot_height;
 				}
 			}
 
