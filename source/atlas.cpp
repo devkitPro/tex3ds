@@ -49,6 +49,7 @@ struct Block
 	Magick::Image img;
 	XY xy;
 	size_t x, y, w, h;
+	bool flipped;
 
 	Block ()                   = delete;
 	Block (const Block &other) = default;
@@ -56,13 +57,25 @@ struct Block
 	Block &operator= (const Block &other) = delete;
 	Block &operator= (Block &&other) = delete;
 
-	Block (size_t index, const Magick::Image &img, size_t x, size_t y, size_t w, size_t h)
-	    : index (index), img (img), x (x), y (y), w (w), h (h)
+	Block (size_t index,
+	    const Magick::Image &img,
+	    size_t x,
+	    size_t y,
+	    size_t w,
+	    size_t h,
+	    bool flipped)
+	    : index (index), img (img), x (x), y (y), w (w), h (h), flipped (false)
 	{
 	}
 
 	Block (size_t index, const Magick::Image &img)
-	    : index (index), img (img), x (0), y (0), w (img.columns ()), h (img.rows ())
+	    : index (index),
+	      img (img),
+	      x (0),
+	      y (0),
+	      w (img.columns ()),
+	      h (img.rows ()),
+	      flipped (false)
 	{
 	}
 
@@ -102,6 +115,7 @@ struct Packer
 	std::set<XY> free;
 
 	size_t width, height;
+	bool border;
 
 	Packer ()                    = delete;
 	Packer (const Packer &other) = delete;
@@ -109,7 +123,7 @@ struct Packer
 	Packer &operator= (const Packer &other) = delete;
 	Packer &operator= (Packer &&other) = default;
 
-	Packer (const std::vector<Magick::Image> &images, size_t width, size_t height);
+	Packer (const std::vector<Magick::Image> &images, size_t width, size_t height, bool border);
 
 	Magick::Image composite () const
 	{
@@ -117,7 +131,7 @@ struct Packer
 
 		for (const auto &block : placed)
 		{
-			if (block.img.columns () == block.w && block.img.rows () == block.h)
+			if (!block.flipped)
 				img.composite (
 				    block.img, Magick::Geometry (0, 0, block.x, block.y), Magick::OverCompositeOp);
 			else
@@ -181,8 +195,8 @@ struct Packer
 	}
 };
 
-Packer::Packer (const std::vector<Magick::Image> &images, size_t width, size_t height)
-    : placed (), next (), free (), width (width), height (height)
+Packer::Packer (const std::vector<Magick::Image> &images, size_t width, size_t height, bool border)
+    : placed (), next (), free (), width (width), height (height), border (border)
 {
 	for (const auto &img : images)
 		next.push_back (Block (std::stoul (img.attribute ("index")), img));
@@ -231,7 +245,16 @@ bool Packer::solve ()
 		block.x = best.first;
 		block.y = best.second;
 		if (best_flipped)
+		{
 			std::swap (block.w, block.h);
+			block.flipped = true;
+		}
+
+		if (border)
+		{
+			block.w++;
+			block.h++;
+		}
 
 		pack (block.x, block.y, block.w, block.h);
 		placed.insert (block);
@@ -352,7 +375,7 @@ struct AreaSizeComparator
 };
 }
 
-Atlas Atlas::build (const std::vector<std::string> &paths, bool trim)
+Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, bool border)
 {
 	std::vector<Magick::Image> images;
 
@@ -386,8 +409,15 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim)
 		     w <= 1024;
 		     w *= 2)
 		{
-			if (w * h >= totalArea)
-				packers.push_back (Packer (images, w, h));
+			size_t allowed_height = h;
+			size_t allowed_width  = w;
+			if (border)
+			{
+				allowed_height -= 2;
+				allowed_width -= 2;
+			}
+			if (allowed_width * allowed_height >= totalArea)
+				packers.push_back (Packer (images, allowed_width, allowed_height, border));
 		}
 	}
 
