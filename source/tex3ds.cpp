@@ -258,6 +258,15 @@ bool output_raw = false;
 /** @brief Output height */
 size_t output_height;
 
+/** @brief Maximum output height */
+size_t max_image_height = 1024;
+
+/** @brief Maximum output width */
+size_t max_image_width = 1024;
+
+/** @brief Add a border between atlased images */
+bool atlas_border = false;
+
 /** @brief Load image
  *  @param[in] img Input image
  *  @returns vector of images to process
@@ -335,12 +344,12 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 	else
 	{
 		// check for valid width
-		if (width > 1024)
-			throw std::runtime_error ("Invalid height");
+		if (width > max_image_width)
+			throw std::runtime_error ("Invalid width");
 
 		// check for valid height
-		if (height > 1024)
-			throw std::runtime_error ("Invalid width");
+		if (height > max_image_height)
+			throw std::runtime_error ("Invalid height");
 	}
 
 	// Set page offsets to 0
@@ -350,21 +359,38 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 	if (process_mode == PROCESS_NORMAL || process_mode == PROCESS_ATLAS)
 	{
 		// expand canvas if necessary
+		// will catch all border cases, as the max width there is never a Po2
 		if (img.columns () != potCeil (img.columns ()) || img.rows () != potCeil (img.rows ()))
 		{
 			Magick::Image copy = img;
 
 			img = Magick::Image (
 			    Magick::Geometry (potCeil (img.columns ()), potCeil (img.rows ())), transparent ());
-			img.composite (copy, Magick::Geometry (0, 0), Magick::OverCompositeOp);
+			if (atlas_border)
+			{
+				// Add border by copying to 1,1 instead of 0,0
+				img.composite (copy, Magick::Geometry (0, 0, 1, 1), Magick::OverCompositeOp);
 
-			// generate subimage info
-			subimage_data.push_back (SubImage (0,
-			    "",
-			    0.0f,
-			    1.0f,
-			    static_cast<float> (copy.columns ()) / img.columns (),
-			    1.0f - (static_cast<float> (copy.rows ()) / img.rows ())));
+				// generate subimage info
+				subimage_data.push_back (SubImage (0,
+				    "",
+				    1.0f / img.columns (),
+				    1.0f - (1.0f / img.rows ()),
+				    static_cast<float> (copy.columns () + 1) / img.columns (),
+				    1.0f - (static_cast<float> (copy.rows () + 1) / img.rows ())));
+			}
+			else
+			{
+				img.composite (copy, Magick::Geometry (0, 0), Magick::OverCompositeOp);
+
+				// generate subimage info
+				subimage_data.push_back (SubImage (0,
+				    "",
+				    0.0f,
+				    1.0f,
+				    static_cast<float> (copy.columns ()) / img.columns (),
+				    1.0f - (static_cast<float> (copy.rows ()) / img.rows ())));
+			}
 		}
 		else if (process_mode != PROCESS_ATLAS)
 		{
@@ -1183,6 +1209,8 @@ void print_usage (const char *prog)
 	    "    --atlas                      Generate texture atlas\n"
 	    "    --cubemap                    Generate a cubemap. See \"Cubemap\"\n"
 	    "    --skybox                     Generate a skybox. See \"Skybox\"\n"
+	    "    --border                     Inserts a 1px transparent border around the final "
+	    "image in default and atlas mode and between images in atlas mode\n"
 	    "    <input>                      Input file\n\n"
 
 	    "  Format Options:\n"
@@ -1289,6 +1317,7 @@ void print_usage (const char *prog)
 const struct option long_options[] = {
     /* clang-format off */
 	{ "atlas",    no_argument,       nullptr, 'a', },
+	{ "border",   no_argument,       nullptr, 'b', },
 	{ "cubemap",  no_argument,       nullptr, 'c', },
 	{ "depends",  required_argument, nullptr, 'd', },
 	{ "format",   required_argument, nullptr, 'f', },
@@ -1422,6 +1451,12 @@ ParseStatus parseOptions (std::vector<char *> &args)
 		case 'a':
 			// atlas
 			process_mode = PROCESS_ATLAS;
+			break;
+
+		case 'b':
+			// border
+			max_image_height = max_image_width = 1022;
+			atlas_border = true;
 			break;
 
 		case 'c':
@@ -1596,6 +1631,13 @@ ParseStatus parseOptions (std::vector<char *> &args)
 
 	assert (optind >= 0);
 
+	if (atlas_border && process_mode != PROCESS_ATLAS && process_mode != PROCESS_NORMAL)
+	{
+		const char *mode = process_mode == PROCESS_CUBEMAP ? "cubemaps": "skyboxes";
+		std::fprintf(stderr, "--border cannot be applied to %s", mode);
+		return PARSE_FAILURE;
+	}
+
 	while (static_cast<size_t> (optind) < args.size ())
 	{
 		std::string path = getPath (args[optind++]);
@@ -1650,8 +1692,21 @@ int main (int argc, char *argv[])
 		std::vector<Magick::Image> images;
 		if (process_mode == PROCESS_ATLAS)
 		{
-			Atlas atlas (Atlas::build (input_files, trim));
+			Atlas atlas (Atlas::build (input_files, trim, atlas_border));
 			subimage_data.swap (atlas.subs);
+
+			if (atlas_border)
+			{
+				// shift all subimages by 1,1 and use Po2 size for divisor
+				for (auto &sub : subimage_data)
+				{
+					sub.left   = (sub.left * (atlas.img.columns()) + 1) / output_width;
+					sub.right  = (sub.right * (atlas.img.columns()) + 1) / output_width;
+					sub.bottom = (sub.bottom * (atlas.img.rows()) - 1) / output_height;
+					sub.top    = (sub.top * (atlas.img.rows()) - 1) / output_height;
+				}
+			}
+
 			images = load_image (atlas.img);
 		}
 		else if (input_files.size () > 1)

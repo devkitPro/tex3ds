@@ -42,5 +42,5 @@ struct Atlas
 	Atlas &operator= (const Atlas &other) = delete;
 	Atlas &operator= (Atlas &&other) = delete;
 
-	static Atlas build (const std::vector<std::string> &paths, bool trim);
+	static Atlas build (const std::vector<std::string> &paths, bool trim, bool border);
 };
