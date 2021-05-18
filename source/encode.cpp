@@ -423,7 +423,7 @@ void l4 (WorkUnit &work)
 {
 	for (size_t j = 0; j < 8; ++j)
 	{
-		for (size_t i = 0; i < 8; ++i)
+		for (size_t i = 0; i < 8; i += 2)
 		{
 			Magick::Color c1 = work.p[j * work.stride + i + 0],
 			              c2 = work.p[j * work.stride + i + 1];
@@ -463,7 +463,7 @@ void a4 (WorkUnit &work)
 {
 	for (size_t j = 0; j < 8; ++j)
 	{
-		for (size_t i = 0; i < 8; ++i)
+		for (size_t i = 0; i < 8; i += 2)
 		{
 			Magick::Color c1 = work.p[j * work.stride + i + 0],
 			              c2 = work.p[j * work.stride + i + 1];

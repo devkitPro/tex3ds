@@ -29,6 +29,7 @@
 #include "rg_etc1.h"
 #include "subimage.h"
 
+#include <limits>
 #include <vector>
 
 /** @namespace encode
