@@ -1153,8 +1153,8 @@ void write_header ()
 /** @brief Print version information */
 void print_version ()
 {
-	std::printf ("tex3ds v1.0.1\n"
-	             "Copyright (c) 2017-2019 Michael Theall (mtheall)\n\n"
+	std::printf ("tex3ds v" PACKAGE_VERSION "\n"
+	             "Copyright (c) 2017-2021 Michael Theall (mtheall)\n\n"
 
 	             "tex3ds is free software: you can redistribute it and/or modify\n"
 	             "it under the terms of the GNU General Public License as published by\n"
