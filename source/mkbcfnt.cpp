@@ -40,8 +40,8 @@ namespace
 /** @brief Print version information */
 void printVersion ()
 {
-	std::printf ("mkbcfnt v1.0.1\n"
-	             "Copyright (c) 2019\n"
+	std::printf ("mkbcfnt v" PACKAGE_VERSION "\n"
+	             "Copyright (c) 2019 - 2021\n"
 	             "    Michael Theall (mtheall)\n"
 	             "    piepie62\n\n"
 
