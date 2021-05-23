@@ -1689,10 +1689,10 @@ int main (int argc, char *argv[])
 				// shift all subimages by 1,1 and use Po2 size for divisor
 				for (auto &sub : subimage_data)
 				{
-					sub.left   = (sub.left * (atlas.img.columns()) + 1) / pot_width;
-					sub.right  = (sub.right * (atlas.img.columns()) + 1) / pot_width;
-					sub.bottom = (sub.bottom * (atlas.img.rows()) - 1) / pot_height;
-					sub.top    = (sub.top * (atlas.img.rows()) - 1) / pot_height;
+					sub.left   = (sub.left * atlas.img.columns() + 1) / pot_width;
+					sub.right  = (sub.right * atlas.img.columns() + 1) / pot_width;
+					sub.bottom = (sub.bottom * atlas.img.rows() + 1) / pot_height;
+					sub.top    = (sub.top * atlas.img.rows() + 1) / pot_height;
 				}
 			}
 
