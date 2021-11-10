@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2021
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -42,5 +42,5 @@ struct Atlas
 	Atlas &operator= (const Atlas &other) = delete;
 	Atlas &operator= (Atlas &&other) = delete;
 
-	static Atlas build (const std::vector<std::string> &paths, bool trim, bool border);
+	static Atlas build (const std::vector<std::string> &paths, bool trim, unsigned int border);
 };

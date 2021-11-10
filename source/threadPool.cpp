@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2019
+ * Copyright (c) 2019-2021
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -31,7 +31,7 @@
 namespace
 {
 std::vector<std::thread> threads;
-std::queue<std::function<void(void)>> jobs;
+std::queue<std::function<void (void)>> jobs;
 std::mutex mutex;
 std::condition_variable newJob;
 std::condition_variable jobTaken;
@@ -39,24 +39,25 @@ bool quit = false;
 
 void worker ()
 {
-	std::unique_lock<std::mutex> lock (mutex);
-
-	while (!quit)
+	while (true)
 	{
-		while (!quit && jobs.empty ())
-			newJob.wait (lock);
+		std::function<void (void)> job;
 
-		if (quit)
-			return;
+		{
+			std::unique_lock<std::mutex> lock (mutex);
+			while (!quit && jobs.empty ())
+				newJob.wait (lock);
 
-		auto job = std::move (jobs.front ());
-		jobs.pop ();
+			if (quit)
+				return;
+
+			job = std::move (jobs.front ());
+			jobs.pop ();
+		}
+
 		jobTaken.notify_one ();
-		lock.unlock ();
 
 		job ();
-
-		lock.lock ();
 	}
 };
 
@@ -74,10 +75,11 @@ ThreadPool ThreadPool::pool;
 ThreadPool::~ThreadPool ()
 {
 	{
-		std::unique_lock<std::mutex> lock (mutex);
+		std::lock_guard<std::mutex> lock (mutex);
 		quit = true;
-		newJob.notify_all ();
 	}
+
+	newJob.notify_all ();
 
 	for (auto &thread : threads)
 		thread.join ();
@@ -87,16 +89,19 @@ ThreadPool::ThreadPool ()
 {
 }
 
-void ThreadPool::pushJob (std::function<void(void)> &&job)
+void ThreadPool::pushJob (std::function<void (void)> &&job)
 {
 	std::call_once (initOnce, init);
 
-	std::unique_lock<std::mutex> lock (mutex);
+	{
+		std::unique_lock<std::mutex> lock (mutex);
 
-	// block while there's many outstanding jobs
-	while (jobs.size () > threads.size () * 2)
-		jobTaken.wait (lock);
+		// block while there's many outstanding jobs
+		while (jobs.size () > threads.size () * 2)
+			jobTaken.wait (lock);
 
-	jobs.emplace (std::move (job));
+		jobs.emplace (std::move (job));
+	}
+
 	newJob.notify_one ();
 }

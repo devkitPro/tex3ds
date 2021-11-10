@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2021
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -26,6 +26,8 @@
 
 #include <libgen.h>
 
+#include <cassert>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -37,22 +39,73 @@ struct SubImage
 	float top;        ///< Top v-coordinate
 	float right;      ///< Right u-coordinate
 	float bottom;     ///< Bottom v-coordinate
+	bool rotated;     ///< Whether sub-image is rotated
 
 	SubImage (size_t index,
 	    const std::string &name,
 	    float left,
 	    float top,
 	    float right,
-	    float bottom)
-	    : index (index), left (left), top (top), right (right), bottom (bottom)
+	    float bottom,
+	    bool rotated)
+	    : index (index),
+	      name (name),
+	      left (left),
+	      top (top),
+	      right (right),
+	      bottom (bottom),
+	      rotated (rotated)
 	{
+		assert (rotated == (top < bottom));
+
+		if (name.empty ())
+			return;
+
 		std::vector<char> path (name.begin (), name.end ());
-		path.push_back (0);
+		path.emplace_back (0);
 		this->name = ::basename (path.data ());
 	}
 
 	bool operator< (const SubImage &rhs) const
 	{
 		return index < rhs.index;
+	}
+
+	void print (unsigned int width, unsigned int height) const
+	{
+		if (rotated)
+			std::printf ("%4zu \"%s\"\n"
+			             "\ttl %5.1lf %5.1lf\n"
+			             "\ttr %5.1lf %5.1lf\n"
+			             "\tbl %5.1lf %5.1lf\n"
+			             "\tbr %5.1lf %5.1lf\n"
+			             "\trotated\n",
+			    index,
+			    name.c_str (),
+			    top * width,
+			    left * height,
+			    top * width,
+			    right * height,
+			    bottom * width,
+			    left * height,
+			    bottom * width,
+			    right * height);
+
+		else
+			std::printf ("%4zu \"%s\"\n"
+			             "\ttl %5.1lf %5.1lf\n"
+			             "\ttr %5.1lf %5.1lf\n"
+			             "\tbl %5.1lf %5.1lf\n"
+			             "\tbr %5.1lf %5.1lf\n",
+			    index,
+			    name.c_str (),
+			    left * width,
+			    top * height,
+			    right * width,
+			    top * height,
+			    left * width,
+			    bottom * height,
+			    right * width,
+			    bottom * height);
 	}
 };

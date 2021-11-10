@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2021
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -265,7 +265,7 @@ size_t max_image_height = 1024;
 size_t max_image_width = 1024;
 
 /** @brief Add a border between atlased images */
-bool border = false;
+unsigned int border = 0;
 
 /** @brief Load image
  *  @param[in] img Input image
@@ -358,37 +358,47 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 	std::vector<Magick::Image> result;
 	if (process_mode == PROCESS_NORMAL || process_mode == PROCESS_ATLAS)
 	{
-		// expand canvas if necessary
-		// will catch all border cases, as the max width there is never a Po2
-		if (img.columns () != potCeil (img.columns ()) || img.rows () != potCeil (img.rows ()))
+		// apply bottom and right border (top/left already applied for atlas)
+		output_width  = potCeil (img.columns () + border);
+		output_height = potCeil (img.rows () + border);
+
+		if (process_mode == PROCESS_NORMAL)
 		{
+			// apply top and left border
+			output_width += border;
+			output_height += border;
+		}
+
+		if (img.columns () != output_width || img.rows () != output_height)
+		{
+			// expand canvas
 			Magick::Image copy = img;
 
-			img = Magick::Image (
-			    Magick::Geometry (potCeil (img.columns ()), potCeil (img.rows ())), transparent ());
+			img = Magick::Image (Magick::Geometry (output_width, output_height), transparent ());
 
-			const size_t padding = border ? 1 : 0;
+			img.composite (copy, Magick::Geometry (0, 0, border, border), Magick::OverCompositeOp);
 
-			img.composite (
-			    copy, Magick::Geometry (0, 0, padding, padding), Magick::OverCompositeOp);
-
-			subimage_data.push_back (SubImage (0,
-			    "",
-			    static_cast<float> (padding) / img.columns (),
-			    1.0f - static_cast<float> (padding) / img.columns (),
-			    static_cast<float> (padding + copy.columns ()) / img.columns (),
-			    1.0f - static_cast<float> (padding + copy.rows ()) / img.rows ()));
+			if (process_mode == PROCESS_NORMAL)
+			{
+				assert (subimage_data.empty ());
+				subimage_data.emplace_back (0,
+				    "",
+				    static_cast<float> (border) / img.columns (),
+				    1.0f - static_cast<float> (border) / img.rows (),
+				    static_cast<float> (border + copy.columns ()) / img.columns (),
+				    1.0f - static_cast<float> (border + copy.rows ()) / img.rows (),
+				    false);
+			}
 		}
-		else if (process_mode != PROCESS_ATLAS)
+		else if (process_mode == PROCESS_NORMAL)
 		{
-			subimage_data.push_back (SubImage (0, "", 0.0f, 1.0f, 1.0f, 0.0f));
+			// a perfect fit
+			assert (subimage_data.empty ());
+			subimage_data.emplace_back (0, "", 0.0f, 1.0f, 1.0f, 0.0f, false);
 		}
-
-		output_width  = img.columns ();
-		output_height = img.rows ();
 
 		// push the source image
-		result.push_back (img);
+		result.emplace_back (std::move (img));
 	}
 	else
 	{
@@ -405,7 +415,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 			copy.flop (); // flip horizontal
 		copy.flip ();     // flip vertical
 		copy.comment ("px_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 
 		// -x
 		copy = img;
@@ -414,7 +424,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 			copy.flop (); // flip horizontal
 		copy.flip ();     // flip vertical
 		copy.comment ("nx_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 
 		// +y
 		copy = img;
@@ -422,7 +432,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 		if (process_mode == PROCESS_CUBEMAP)
 			copy.flip (); // flip vertical
 		copy.comment ("py_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 
 		// -y
 		copy = img;
@@ -430,7 +440,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 		if (process_mode == PROCESS_CUBEMAP)
 			copy.flip (); // flip vertical
 		copy.comment ("ny_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 
 		// +z
 		copy = img;
@@ -443,7 +453,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 		}
 		copy.flip (); // flip vertical
 		copy.comment ("pz_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 
 		// -z
 		copy = img;
@@ -456,7 +466,7 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 		}
 		copy.flip (); // flip vertical
 		copy.comment ("nz_");
-		result.push_back (copy);
+		result.emplace_back (copy);
 	}
 
 	return result;
@@ -555,12 +565,13 @@ bool work_done = false;
  */
 void work_thread (void *param)
 {
-	std::unique_lock<std::mutex> mutex (work_mutex);
 	while (true)
 	{
+		std::unique_lock<std::mutex> lock (work_mutex);
+
 		// wait for work
 		while (!work_done && work_queue.empty ())
-			work_cond.wait (mutex);
+			work_cond.wait (lock);
 
 		// if there's no more work, quit
 		if (work_done && work_queue.empty ())
@@ -569,19 +580,19 @@ void work_thread (void *param)
 		// get a work unit
 		encode::WorkUnit work = std::move (work_queue.front ());
 		work_queue.pop ();
-		mutex.unlock ();
+		lock.unlock ();
 
 		// process the work unit
 		work.process (work);
 
-		// put result on the result queue
-		result_mutex.lock ();
-		result_queue.push_back (std::move (work));
-		std::push_heap (result_queue.begin (), result_queue.end ());
-		result_cond.notify_one ();
-		result_mutex.unlock ();
+		{
+			// put result on the result queue
+			std::lock_guard<std::mutex> lock (result_mutex);
+			result_queue.emplace_back (std::move (work));
+			std::push_heap (result_queue.begin (), result_queue.end ());
+		}
 
-		mutex.lock ();
+		result_cond.notify_one ();
 	}
 }
 
@@ -707,11 +718,9 @@ void process_image (Magick::Image &img)
 
 	// create worker threads
 	std::vector<std::thread> workers;
-	work_mutex.lock ();
 	work_done = false;
-	work_mutex.unlock ();
 	for (size_t i = 0; i < std::thread::hardware_concurrency (); ++i)
-		workers.push_back (std::thread (work_thread, nullptr));
+		workers.emplace_back (work_thread, nullptr);
 
 	size_t voff = 0; // vertical offset for mipmap preview
 	size_t hoff = 0; // horizontal offset for mipmap preview
@@ -750,21 +759,25 @@ void process_image (Magick::Image &img)
 				    !preview_path.empty (),
 				    process);
 
-				// queue the work unit
-				work_mutex.lock ();
-				work_queue.push (std::move (work));
+				{
+					// queue the work unit
+					std::lock_guard<std::mutex> lock (work_mutex);
+					work_queue.push (std::move (work));
+				}
+
 				work_cond.notify_one ();
-				work_mutex.unlock ();
 			}
 		}
 
 		if (img_queue.empty ())
 		{
-			// no more work is coming
-			work_mutex.lock ();
-			work_done = true;
+			{
+				// no more work is coming
+				std::lock_guard<std::mutex> lock (work_mutex);
+				work_done = true;
+			}
+
 			work_cond.notify_all ();
-			work_mutex.unlock ();
 		}
 
 		// gather results
@@ -773,9 +786,7 @@ void process_image (Magick::Image &img)
 			// wait for the next result
 			std::unique_lock<std::mutex> mutex (result_mutex);
 			while (result_queue.empty () || result_queue.front ().sequence != num_result)
-			{
 				result_cond.wait (mutex);
-			}
 
 			// get the result's output buffer
 			encode::Buffer result;
@@ -786,8 +797,6 @@ void process_image (Magick::Image &img)
 
 			// append the result's output buffer
 			image_data.insert (image_data.end (), result.begin (), result.end ());
-
-			mutex.lock ();
 		}
 
 		// synchronize the pixel cache
@@ -902,14 +911,16 @@ void write_tex3ds_header (FILE *fp)
 	encode::encode<uint8_t> (num_mipmaps, buf);
 
 	// encode subimage info
-	// for(size_t i = 0; i < subimage_data.size(); ++i)
 	for (const auto &sub : subimage_data)
 	{
 		uint16_t width;
 		uint16_t height;
 
-		// check if subimage is rotated
-		if (sub.top < sub.bottom)
+#ifndef NDEBUG
+		sub.print (output_width, output_height);
+#endif
+
+		if (sub.rotated)
 		{
 			height = (sub.bottom - sub.top) * output_width;
 			width  = (sub.right - sub.left) * output_height;
@@ -1117,7 +1128,7 @@ void write_header ()
 
 	{
 		std::vector<char> path (header_path.begin (), header_path.end ());
-		path.push_back (0);
+		path.emplace_back (0);
 		header_path = ::basename (path.data ());
 	}
 
@@ -1130,6 +1141,12 @@ void write_header ()
 	size_t i = 0;
 	for (const auto &sub : subimage_data)
 	{
+		if (sub.name.empty ())
+		{
+			std::fprintf (fp, "#define %s_idx %zu\n", header_path.c_str (), i++);
+			continue;
+		}
+
 		std::string label = sub.name;
 
 		pos = label.rfind ('.');
@@ -1400,8 +1417,7 @@ std::vector<std::string> readOptions (const std::string &path)
 				else if (std::isspace (c))
 				{
 					if (!opt.empty ())
-						options.push_back (opt);
-					opt.clear ();
+						options.emplace_back (std::move (opt));
 				}
 				else
 					opt.push_back (c);
@@ -1413,7 +1429,7 @@ std::vector<std::string> readOptions (const std::string &path)
 			throw std::runtime_error ("Reached end of options file at partially quoted string");
 
 		if (!opt.empty ())
-			options.push_back (opt);
+			options.emplace_back (opt);
 
 		return options;
 	}
@@ -1442,8 +1458,8 @@ ParseStatus parseOptions (std::vector<char *> &args)
 
 		case 'b':
 			// border
-			max_image_height = max_image_width = 1022;
-			border = true;
+			max_image_height = max_image_width = 1023;
+			border = 1;
 			break;
 
 		case 'c':
@@ -1493,7 +1509,7 @@ ParseStatus parseOptions (std::vector<char *> &args)
 				std::string new_cwd;
 				{
 					std::vector<char> path (optionsFile.begin (), optionsFile.end ());
-					path.push_back (0);
+					path.emplace_back (0);
 					new_cwd = ::dirname (path.data ());
 				}
 
@@ -1506,7 +1522,7 @@ ParseStatus parseOptions (std::vector<char *> &args)
 				for (const auto &opt : options)
 				{
 					// getopt only take non-const :(
-					o.push_back (const_cast<char *> (opt.c_str ()));
+					o.emplace_back (const_cast<char *> (opt.c_str ()));
 				}
 
 				include_stack.emplace_back (std::move (new_cwd));
@@ -1681,20 +1697,6 @@ int main (int argc, char *argv[])
 		{
 			Atlas atlas (Atlas::build (input_files, trim, border));
 			subimage_data.swap (atlas.subs);
-
-			if (border)
-			{
-				size_t pot_width = potCeil(atlas.img.columns());
-				size_t pot_height = potCeil(atlas.img.rows());
-				// shift all subimages by 1,1 and use Po2 size for divisor
-				for (auto &sub : subimage_data)
-				{
-					sub.left   = (sub.left * atlas.img.columns() + 1) / pot_width;
-					sub.right  = (sub.right * atlas.img.columns() + 1) / pot_width;
-					sub.bottom = (sub.bottom * atlas.img.rows() + 1) / pot_height;
-					sub.top    = (sub.top * atlas.img.rows() + 1) / pot_height;
-				}
-			}
 
 			images = load_image (atlas.img);
 		}

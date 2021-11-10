@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2021
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -49,7 +49,7 @@ struct Block
 	Magick::Image img;
 	XY xy;
 	size_t x, y, w, h;
-	bool flipped;
+	bool rotated;
 
 	Block ()                   = delete;
 	Block (const Block &other) = default;
@@ -57,40 +57,36 @@ struct Block
 	Block &operator= (const Block &other) = delete;
 	Block &operator= (Block &&other) = delete;
 
-	Block (size_t index,
-	    const Magick::Image &img,
-	    size_t x,
-	    size_t y,
-	    size_t w,
-	    size_t h,
-	    bool flipped)
-	    : index (index), img (img), x (x), y (y), w (w), h (h), flipped (false)
-	{
-	}
-
-	Block (size_t index, const Magick::Image &img)
+	Block (size_t index, const Magick::Image &img, unsigned int border)
 	    : index (index),
 	      img (img),
 	      x (0),
 	      y (0),
-	      w (img.columns ()),
-	      h (img.rows ()),
-	      flipped (false)
+	      w (img.columns () + border),
+	      h (img.rows () + border),
+	      rotated (false)
 	{
 	}
 
-	SubImage subImage (const Magick::Image &atlas) const
+	SubImage subImage (const Magick::Image &atlas, unsigned int border) const
 	{
-		float left   = static_cast<float> (x) / atlas.columns ();
-		float top    = 1.0f - (static_cast<float> (y) / atlas.rows ());
-		float right  = static_cast<float> (x + w) / atlas.columns ();
-		float bottom = 1.0f - (static_cast<float> (y + h) / atlas.rows ());
+		size_t width  = atlas.columns () + border;
+		size_t height = atlas.rows () + border;
 
-		if (img.columns () == w && img.rows () == h)
-			return SubImage (index, img.fileName (), left, top, right, bottom);
+		float left   = static_cast<float> (x + border) / width;
+		float top    = 1.0f - (static_cast<float> (y + border) / height);
+		float right  = static_cast<float> (x + w) / width;
+		float bottom = 1.0f - (static_cast<float> (y + h) / height);
 
-		// rotated
-		return SubImage (index, img.fileName (), bottom, left, top, right);
+		assert (left * width == x + border);
+		assert ((1.0f - top) * height == y + border);
+		assert (right * width == x + w);
+		assert ((1.0f - bottom) * height == y + h);
+
+		if (rotated)
+			return SubImage (index, img.fileName (), bottom, left, top, right, true);
+
+		return SubImage (index, img.fileName (), left, top, right, bottom, false);
 	}
 
 	bool operator< (const Block &other) const
@@ -115,7 +111,7 @@ struct Packer
 	std::set<XY> free;
 
 	size_t width, height;
-	bool border;
+	unsigned int border;
 
 	Packer ()                    = delete;
 	Packer (const Packer &other) = delete;
@@ -123,7 +119,10 @@ struct Packer
 	Packer &operator= (const Packer &other) = delete;
 	Packer &operator= (Packer &&other) = default;
 
-	Packer (const std::vector<Magick::Image> &images, size_t width, size_t height, bool border);
+	Packer (const std::vector<Magick::Image> &images,
+	    size_t width,
+	    size_t height,
+	    unsigned int border);
 
 	Magick::Image composite () const
 	{
@@ -131,7 +130,7 @@ struct Packer
 
 		for (const auto &block : placed)
 		{
-			if (!block.flipped)
+			if (!block.rotated)
 				img.composite (
 				    block.img, Magick::Geometry (0, 0, block.x, block.y), Magick::OverCompositeOp);
 			else
@@ -195,11 +194,14 @@ struct Packer
 	}
 };
 
-Packer::Packer (const std::vector<Magick::Image> &images, size_t width, size_t height, bool border)
+Packer::Packer (const std::vector<Magick::Image> &images,
+    size_t width,
+    size_t height,
+    unsigned int border)
     : placed (), next (), free (), width (width), height (height), border (border)
 {
 	for (const auto &img : images)
-		next.push_back (Block (std::stoul (img.attribute ("index")), img));
+		next.emplace_back (std::stoul (img.attribute ("index")), img, border);
 
 	free.insert (XY (0, 0));
 }
@@ -213,7 +215,7 @@ bool Packer::solve ()
 
 		XY best;
 		size_t best_score = 0;
-		bool best_flipped = false;
+		bool best_rotated = false;
 		for (const auto &it : free)
 		{
 			block.x = it.first;
@@ -224,7 +226,7 @@ bool Packer::solve ()
 			{
 				best         = it;
 				best_score   = score;
-				best_flipped = false;
+				best_rotated = false;
 			}
 
 			if (block.w != block.h)
@@ -234,7 +236,7 @@ bool Packer::solve ()
 				{
 					best         = it;
 					best_score   = score;
-					best_flipped = true;
+					best_rotated = true;
 				}
 			}
 		}
@@ -244,16 +246,10 @@ bool Packer::solve ()
 
 		block.x = best.first;
 		block.y = best.second;
-		if (best_flipped)
+		if (best_rotated)
 		{
 			std::swap (block.w, block.h);
-			block.flipped = true;
-		}
-
-		if (border)
-		{
-			block.w++;
-			block.h++;
+			block.rotated = true;
 		}
 
 		pack (block.x, block.y, block.w, block.h);
@@ -375,11 +371,10 @@ struct AreaSizeComparator
 };
 }
 
-Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, bool border)
+Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, unsigned int border)
 {
 	std::vector<Magick::Image> images;
 
-	size_t i = 0;
 	for (const auto &path : paths)
 	{
 		Magick::Image img (path);
@@ -390,15 +385,15 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, bool borde
 			img.page (Magick::Geometry (img.columns (), img.rows ()));
 		}
 
-		img.attribute ("index", std::to_string (i++));
-		images.push_back (img);
+		img.attribute ("index", std::to_string (images.size ()));
+		images.emplace_back (std::move (img));
 	}
 
 	std::sort (std::begin (images), std::end (images), AreaSizeComparator ());
 
 	size_t totalArea = 0;
 	for (const auto &img : images)
-		totalArea += img.rows () * img.columns ();
+		totalArea += (img.rows () + border) * (img.columns () + border);
 
 	std::vector<Packer> packers;
 	for (size_t h = calcPOT (std::min (images.back ().columns (), images.back ().rows ()));
@@ -409,15 +404,11 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, bool borde
 		     w <= 1024;
 		     w *= 2)
 		{
-			size_t allowed_height = h;
-			size_t allowed_width  = w;
-			if (border)
-			{
-				allowed_height -= 2;
-				allowed_width -= 2;
-			}
+			const size_t allowed_height = h - border;
+			const size_t allowed_width  = w - border;
+
 			if (allowed_width * allowed_height >= totalArea)
-				packers.push_back (Packer (images, allowed_width, allowed_height, border));
+				packers.emplace_back (images, allowed_width, allowed_height, border);
 		}
 	}
 
@@ -431,7 +422,7 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, bool borde
 
 			atlas.img = packer.composite ();
 			for (auto &block : packer.placed)
-				atlas.subs.push_back (block.subImage (atlas.img));
+				atlas.subs.emplace_back (block.subImage (atlas.img, border));
 
 			std::sort (std::begin (atlas.subs), std::end (atlas.subs));
 			return atlas;
