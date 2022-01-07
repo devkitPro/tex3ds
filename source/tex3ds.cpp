@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2021
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -970,22 +970,29 @@ std::vector<uint8_t> compressAuto (const void *src, size_t len)
 {
 	std::vector<uint8_t> best;
 
-	static std::vector<uint8_t> (*const compress_funcs[]) (const void *, size_t) = {
-	    compressNone,
-	    lzssEncode,
-	    lz11Encode,
-	    // huffEncode, // broken
-	    rleEncode,
-	};
+	static std::pair<std::vector<uint8_t> (*) (const void *, size_t), const char *>
+	    compress_funcs[] = {
+	        {&compressNone, "none"},
+	        {&lzssEncode, "lzss"},
+	        {&lz11Encode, "lz11"},
+	        {&huffEncode, "huff"},
+	        {&rleEncode, "rle"},
+	    };
+
+	const char *best_type = nullptr;
 
 	for (const auto &compress : compress_funcs)
 	{
-		std::vector<uint8_t> output = compress (src, len);
+		std::vector<uint8_t> output = compress.first (src, len);
 
 		if (best.empty () || (!output.empty () && output.size () < best.size ()))
+		{
 			best.swap (output);
+			best_type = compress.second;
+		}
 	}
 
+	std::printf ("Used %s for compression\n", best_type);
 	return best;
 }
 
@@ -1279,7 +1286,7 @@ void print_usage (const char *prog)
 	    "  Compression Options:\n"
 	    "    -z auto              Automatically select best compression (default)\n"
 	    "    -z none              No compression\n"
-	    "    -z huff, -z huffman  Huffman encoding (possible to produce garbage)\n"
+	    "    -z huff, -z huffman  Huffman encoding\n"
 	    "    -z lzss, -z lz10     LZSS compression\n"
 	    "    -z lz11              LZ11 compression\n"
 	    "    -z rle               Run-length encoding\n\n"
@@ -1326,6 +1333,7 @@ const struct option long_options[] = {
 	{ "depends",  required_argument, nullptr, 'd', },
 	{ "format",   required_argument, nullptr, 'f', },
 	{ "help",     no_argument,       nullptr, 'h', },
+	{ "include",  required_argument, nullptr, 'i', },
 	{ "mipmap",   required_argument, nullptr, 'm', },
 	{ "output",   required_argument, nullptr, 'o', },
 	{ "preview",  required_argument, nullptr, 'p', },

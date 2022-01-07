@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -25,51 +25,30 @@
 #include "future.h"
 
 #include <algorithm>
-#include <bitset>
-#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <deque>
 #include <memory>
-#include <queue>
 
 namespace
 {
-/** @brief Bitmap */
-typedef std::bitset<512> Bitmap;
-
-size_t find (const Bitmap &bitmap, size_t i)
-{
-	for (; i < bitmap.size (); ++i)
-	{
-		if (!bitmap.test (i))
-			return i;
-	}
-
-	std::abort ();
-}
-
-/** @brief Print a Huffman code
- *  @param[in] code    Huffman code
- *  @param[in] codeLen Huffman code length (bits)
- */
-void printCode (uint32_t code, size_t codeLen)
-{
-	for (size_t i = 0; i < codeLen; ++i)
-		std::fputc ('0' + ((code >> (codeLen - i - 1)) & 1), stdout);
-}
-
 /** @brief Huffman node */
 class Node
 {
 public:
-	~Node ()
-	{
-	}
-
+	/** @brief Parameterized constructor
+	 *  @param val   Node value
+	 *  @count count Node count
+	 */
 	Node (uint8_t val, size_t count) : count (count), val (val)
 	{
 	}
 
-	Node (std::unique_ptr<Node> &&left, std::unique_ptr<Node> &&right)
+	/** @brief Parameterized constructor
+	 *  @param left  Left child
+	 *  @count right Right child
+	 */
+	Node (std::unique_ptr<Node> left, std::unique_ptr<Node> right)
 	    : child{std::move (left), std::move (right)}, count (child[0]->count + child[1]->count)
 	{
 		// set children's parent to self
@@ -77,12 +56,19 @@ public:
 		child[1]->parent = this;
 	}
 
-	Node ()                  = delete;
+	Node () = delete;
+
 	Node (const Node &other) = delete;
-	Node (Node &&other)      = delete;
+
+	Node (Node &&other) = delete;
+
 	Node &operator= (const Node &other) = delete;
+
 	Node &operator= (Node &&other) = delete;
 
+	/** @brief Comparison operator
+	 *  @param other Object to compare
+	 */
 	bool operator< (const Node &other) const
 	{
 		// major key is count
@@ -93,65 +79,10 @@ public:
 		return val < other.val;
 	}
 
-#if 1
-	/** @brief Print node
-	 *  @param[in] indent Indentation level
-	 */
-	void print (int indent) const
+	/** @brief Whether this node is a parent */
+	bool isParent () const
 	{
-		if (child[0])
-			std::printf ("%*s----: %zu\n", indent, "", count);
-		else
-		{
-			std::printf ("%*s0x%02x: %zu ", indent, "", val, count);
-			for (size_t j = 0; j < codeLen; ++j)
-				std::fputc ('0' + ((code >> (codeLen - j - 1)) & 1), stdout);
-			std::fputc ('\n', stdout);
-		}
-	}
-
-	/** @brief Print nodes and their children
-	 *  @param[in] nodes    Nodes to print
-	 *  @param[in] numNodes Number of nodes
-	 *  @param[in] indent   Indentation level
-	 */
-	static void printNodes (std::unique_ptr<Node> nodes[2], size_t numNodes, int indent)
-	{
-		// print each node
-		for (size_t i = 0; i < numNodes; ++i)
-		{
-			if (nodes[i])
-				nodes[i]->print (indent);
-		}
-
-		// print the children
-		for (size_t i = 0; i < numNodes; ++i)
-		{
-			if (nodes[i] && nodes[i]->child[0])
-				printNodes (nodes[i]->child, 2, indent + 2);
-		}
-	}
-#endif
-
-	/** @brief Print a Huffman tree
-	 *  @param[in] code    Huffman code
-	 *  @param[in] codeLen Huffman code length (bits)
-	 */
-	void printTree (uint32_t code, size_t codeLen)
-	{
-		if (!child[0])
-		{
-			// this is a data node; print the data
-			std::printf ("0x%02x: ", val);
-			printCode (code, codeLen);
-			std::fputc ('\n', stdout);
-		}
-		else
-		{
-			// print the children
-			child[0]->printTree ((code << 1) | 0, codeLen + 1);
-			child[1]->printTree ((code << 1) | 1, codeLen + 1);
-		}
+		return static_cast<bool> (child[0]);
 	}
 
 	/** @brief Build Huffman codes
@@ -167,12 +98,23 @@ public:
 	 */
 	static void buildLookup (std::vector<Node *> &nodes, const std::unique_ptr<Node> &node);
 
-	/** @brief Encode Huffman tree
-	 *  @param[in] tree   Huffman tree
-	 *  @param[in] node   Huffman node
-	 *  @param[in] bitmap Tree bitmap
+	/** @brief Serialize Huffman tree
+	 *  @param[out] tree Serialized tree
+	 *  @param[in]  node Root of subtree
+	 *  @param[in]  next Next available slot in tree
 	 */
-	static void encodeTree (std::vector<uint8_t> &tree, Node *node, Bitmap &bitmap);
+	static void serializeTree (std::vector<Node *> &tree, Node *node, unsigned next);
+
+	/** @brief Fixup serialized Huffman tree
+	 *  @param[inout] tree Serialized tree
+	 */
+	static void fixupTree (std::vector<Node *> &tree);
+
+	/** @brief Encode Huffman tree
+	 *  @param[out] tree Huffman tree
+	 *  @param[in]  node Huffman node
+	 */
+	static void encodeTree (std::vector<uint8_t> &tree, Node *node);
 
 	/** @brief Count number of nodes in subtree
 	 *  @returns Number of nodes in subtree
@@ -180,7 +122,7 @@ public:
 	size_t numNodes () const
 	{
 		// sum of children plus self
-		if (child[0])
+		if (isParent ())
 			return child[0]->numNodes () + child[1]->numNodes () + 1;
 
 		// this is a data node, just count self
@@ -190,99 +132,68 @@ public:
 	/** @brief Count number of leaves in subtree
 	 *  @returns Number of leaves in subtree
 	 */
-	size_t numLeaves () const
+	size_t numLeaves ()
 	{
-		// sum of children
-		if (child[0])
-			return child[0]->numLeaves () + child[1]->numLeaves ();
+		if (leaves == 0)
+		{
+			if (isParent ())
+			{
+				// sum of children
+				leaves = child[0]->numLeaves () + child[1]->numLeaves ();
+			}
+			else
+			{
+				// this is a data node; it is a leaf
+				leaves = 1;
+			}
+		}
 
-		// this is a data node; it is a leaf
-		return 1;
+		return leaves;
 	}
 
+	/** @brief Get code */
 	uint32_t getCode () const
 	{
+		assert (!isParent ());
 		return code;
 	}
 
+	/** @brief Get code length */
 	uint8_t getCodeLen () const
 	{
+		assert (!isParent ());
 		return codeLen;
-	}
-
-	/** @brief Set tree position
-	 *  @param[in] bitmap Tree occupancy
-	 *  @param[in] i      Tree position to set
-	 */
-	void setPos (Bitmap &bitmap, size_t i)
-	{
-		assert (!bitmap.test (i));
-		bitmap.set (i);
 	}
 
 private:
 	Node *parent;                   ///< Parent node
 	std::unique_ptr<Node> child[2]; ///< Children nodes
-	size_t count;                   ///< Node weight
-	uint32_t code;                  ///< Huffman encoding
-	uint16_t pos;                   ///< Huffman tree position
-	uint8_t val;                    ///< Huffman tree value
-	uint8_t codeLen;                ///< Huffman code length (bits)
+	size_t count    = 0;            ///< Node weight
+	uint32_t code   = 0;            ///< Huffman encoding
+	unsigned leaves = 0;            ///< Number of leaves
+	uint8_t val     = 0;            ///< Huffman tree value
+	uint8_t codeLen = 0;            ///< Huffman code length (bits)
+#ifndef NDEBUG
+	uint16_t pos = 0; ///< Huffman tree position
+#endif
 };
-
-/** @brief Print a Huffman table (encoded tree)
- *  @param[in] tree    Huffman table
- *  @param[in] pos     Position in table
- *  @param[in] code    Huffman code
- *  @param[in] codeLen Huffman code length (bits)
- */
-void printTable (const std::vector<uint8_t> &tree, size_t pos, uint32_t code, size_t codeLen)
-{
-	size_t offset = tree[pos] & 0x1F;
-	size_t child  = (pos & ~1) + offset * 2 + 2;
-
-	// print left subtree
-	if (!(tree[pos] & 0x80))
-		printTable (tree, child + 0, (code << 1) | 0, codeLen + 1);
-
-	// print right subtree
-	if (!(tree[pos] & 0x40))
-		printTable (tree, child + 1, (code << 1) | 1, codeLen + 1);
-
-	// print left data node
-	if (tree[pos] & 0x80)
-	{
-		std::printf ("0x%02x: ", tree[child + 0]);
-		printCode ((code << 1) | 0, codeLen + 1);
-		std::fputc ('\n', stdout);
-	}
-
-	// print right data node
-	if (tree[pos] & 0x40)
-	{
-		std::printf ("0x%02x: ", tree[child + 1]);
-		printCode ((code << 1) | 1, codeLen + 1);
-		std::fputc ('\n', stdout);
-	}
-}
 
 void Node::buildCodes (std::unique_ptr<Node> &node, uint32_t code, size_t codeLen)
 {
-	// don't exceept 32-bit codes
+	// don't exceed 32-bit codes
 	assert (codeLen < 32);
 
-	// assert a full tree; every node has neither or both children
-	assert ((node->child[0] && node->child[1]) || (!node->child[0] && !node->child[1]));
-
-	if (node->child[0])
+	if (node->isParent ())
 	{
 		// build codes for each subtree
-		buildCodes (node->child[0], code << 1, codeLen + 1);
+		assert (node->child[0] && node->child[1]);
+		buildCodes (node->child[0], (code << 1) | 0, codeLen + 1);
 		buildCodes (node->child[1], (code << 1) | 1, codeLen + 1);
 	}
 	else
 	{
 		// set code for data node
+		assert (!node->child[0] && !node->child[1]);
 		node->code    = code;
 		node->codeLen = codeLen;
 	}
@@ -290,155 +201,168 @@ void Node::buildCodes (std::unique_ptr<Node> &node, uint32_t code, size_t codeLe
 
 void Node::buildLookup (std::vector<Node *> &nodes, const std::unique_ptr<Node> &node)
 {
-	if (node->child[0])
-	{
-		// build subtree lookups
-		buildLookup (nodes, node->child[0]);
-		buildLookup (nodes, node->child[1]);
-	}
-	else
+	if (!node->isParent ())
 	{
 		// set lookup entry
 		nodes[node->val] = node.get ();
+		return;
+	}
+
+	// build subtree lookups
+	buildLookup (nodes, node->child[0]);
+	buildLookup (nodes, node->child[1]);
+}
+
+void Node::serializeTree (std::vector<Node *> &tree, Node *node, unsigned next)
+{
+	assert (node->isParent ());
+
+	if (node->numLeaves () > 0x40)
+	{
+		// this subtree will overflow the offset field if inserted naively
+		tree[next + 0] = node->child[0].get ();
+		tree[next + 1] = node->child[1].get ();
+
+		unsigned a = 0;
+		unsigned b = 1;
+
+		if (node->child[1]->numLeaves () < node->child[0]->numLeaves ())
+			std::swap (a, b);
+
+		if (node->child[a]->isParent ())
+		{
+			node->child[a]->val = 0;
+			serializeTree (tree, node->child[a].get (), next + 2);
+		}
+
+		if (node->child[b]->isParent ())
+		{
+			node->child[b]->val = node->child[a]->numLeaves () - 1;
+			serializeTree (tree, node->child[b].get (), next + 2 * node->child[a]->numLeaves ());
+		}
+
+		return;
+	}
+
+	std::deque<Node *> queue;
+
+	queue.emplace_back (node->child[0].get ());
+	queue.emplace_back (node->child[1].get ());
+
+	while (!queue.empty ())
+	{
+		node = queue.front ();
+		queue.pop_front ();
+
+		tree[next++] = node;
+
+		if (!node->isParent ())
+			continue;
+
+		node->val = queue.size () / 2;
+
+		queue.emplace_back (node->child[0].get ());
+		queue.emplace_back (node->child[1].get ());
 	}
 }
 
-void Node::encodeTree (std::vector<uint8_t> &tree, Node *node, Bitmap &bitmap)
+void Node::fixupTree (std::vector<Node *> &tree)
 {
-	uint8_t mask;
-	ssize_t next;
-
-	// make sure this node's position is taken
-	assert (bitmap.test (node->pos));
-
-	if (node->numLeaves () <= 64)
+	for (unsigned i = 1; i < tree.size (); ++i)
 	{
-		std::queue<Node *> queue;
-		queue.push (node);
+		if (!tree[i]->isParent () || tree[i]->val <= 0x3F)
+			continue;
 
-		do
+		unsigned shift = tree[i]->val - 0x3F;
+
+		if ((i & 1) && tree[i - 1]->val == 0x3F)
 		{
-			node = queue.front ();
-			queue.pop ();
+			// right child, and left sibling would overflow if we shifted;
+			// shift the left child by 1 instead
+			--i;
+			shift = 1;
+		}
 
-			size_t leaf = node->numLeaves ();
+		unsigned nodeEnd   = i / 2 + 1 + tree[i]->val;
+		unsigned nodeBegin = nodeEnd - shift;
 
-			if (leaf == 1)
-			{
-				// this is a data node; assign its value
-				tree[node->pos] = node->val;
-				std::printf ("[0x%02x] data=0x%02x\n", node->pos, node->val);
-			}
-			else
-			{
-				// this is a branch node
-				mask = 0;
+		unsigned shiftBegin = 2 * nodeBegin;
+		unsigned shiftEnd   = 2 * nodeEnd;
 
-				// check if left child is a data node
-				if (node->child[0]->numLeaves () == 1)
-					mask |= 0x80;
+		// move last child pair to front
+		auto tmp = std::make_pair (tree[shiftEnd], tree[shiftEnd + 1]);
+		std::memmove (
+		    &tree[shiftBegin + 2], &tree[shiftBegin], sizeof (Node *) * (shiftEnd - shiftBegin));
+		std::tie (tree[shiftBegin], tree[shiftBegin + 1]) = tmp;
 
-				// check if right child is a data node
-				if (node->child[1]->numLeaves () == 1)
-					mask |= 0x40;
+		// adjust offsets
+		tree[i]->val -= shift;
+		for (unsigned index = i + 1; index < shiftBegin; ++index)
+		{
+			if (!tree[index]->isParent ())
+				continue;
 
-				// find a free position in the tree
-				next = find (bitmap, node->pos);
-				assert (next > node->pos);
-				assert (next % 2 == 0);
-				assert (!bitmap.test (next + 0));
-				assert (!bitmap.test (next + 1));
-				assert ((next - node->pos - 1) / 2 < 64);
+			unsigned node = index / 2 + 1 + tree[index]->val;
+			if (node >= nodeBegin && node < nodeEnd)
+				++tree[index]->val;
+		}
 
-				// encode location/type of children nodes
-				tree[node->pos] = ((next - node->pos - 1) / 2) | mask;
-				std::printf ("[0x%02x] 0x%02x, left=0x%02zx, right=0x%02zx\n",
-				    node->pos,
-				    tree[node->pos],
-				    next + 0,
-				    next + 1);
+		if (tree[shiftBegin + 0]->isParent ())
+			tree[shiftBegin + 0]->val += shift;
+		if (tree[shiftBegin + 1]->isParent ())
+			tree[shiftBegin + 1]->val += shift;
 
-				// mark the children positions as taken
-				bitmap.set (next + 0);
-				bitmap.set (next + 1);
+		for (unsigned index = shiftBegin + 2; index < shiftEnd + 2; ++index)
+		{
+			if (!tree[index]->isParent ())
+				continue;
 
-				// set the children positions
-				node->child[0]->pos = next + 0;
-				node->child[1]->pos = next + 1;
-
-				// append children to the node queue (breadth first process)
-				queue.push (node->child[0].get ());
-				queue.push (node->child[1].get ());
-			}
-		} while (!queue.empty ());
+			unsigned node = index / 2 + 1 + tree[index]->val;
+			if (node > nodeEnd)
+				--tree[index]->val;
+		}
 	}
-	else
+}
+
+void Node::encodeTree (std::vector<uint8_t> &tree, Node *node)
+{
+	std::vector<Node *> nodeTree (tree.size ());
+	nodeTree[1] = node;
+	serializeTree (nodeTree, node, 2);
+	fixupTree (nodeTree);
+
+#ifndef NDEBUG
+	for (unsigned i = 1; i < nodeTree.size (); ++i)
 	{
-		// the subtree is large enough that the right child's children's positions
-		// might be filled before we can encode them
-		mask = 0;
+		assert (nodeTree[i]);
+		nodeTree[i]->pos = i;
+	}
 
-		// get the left and right subtree leaf count
-		size_t l_leaf = node->child[0]->numLeaves ();
-		size_t r_leaf = node->child[1]->numLeaves ();
+	for (unsigned i = 1; i < nodeTree.size (); ++i)
+	{
+		node = nodeTree[i];
+		if (!node->isParent ())
+			continue;
 
-		// check if the left child is a data node
-		if (l_leaf == 1)
-			mask |= 0x80;
+		assert (!(node->val & 0x80));
+		assert (!(node->val & 0x40));
+		assert (node->child[0]->pos == (node->pos & ~1) + 2 * node->val + 2);
+	}
+#endif
 
-		// check if the right child is a data node
-		if (r_leaf == 1)
-			mask |= 0x40;
+	for (unsigned i = 1; i < nodeTree.size (); ++i)
+	{
+		node = nodeTree[i];
 
-		// find a free position in the tree
-		next = find (bitmap, node->pos);
-		assert (next > node->pos);
-		assert (next % 2 == 0);
-		assert (!bitmap.test (next + 0));
-		assert (!bitmap.test (next + 1));
-		assert ((next - node->pos - 1) / 2 < 64);
+		tree[i] = node->val;
 
-		// encode location/type of children nodes
-		tree[node->pos] = ((next - node->pos - 1) / 2) | mask;
-		std::printf ("[0x%02x] 0x%02x, left=0x%02zx, right=0x%02zx\n",
-		    node->pos,
-		    tree[node->pos],
-		    next + 0,
-		    next + 1);
+		if (!node->isParent ())
+			continue;
 
-		// mark the children positions as taken
-		bitmap.set (next + 0);
-		bitmap.set (next + 1);
-
-		// set the children positions
-		node->child[0]->pos = next + 0;
-		node->child[1]->pos = next + 1;
-
-		// clamp position of right child's children
-		if (l_leaf > 0x40)
-			l_leaf = 0x40;
-
-		// make sure right child's children have a free spot
-		assert (!bitmap.test (next + l_leaf * 2 + 0));
-		assert (!bitmap.test (next + l_leaf * 2 + 1));
-
-		// reserve right child's children's position
-		bitmap.set (next + l_leaf * 2 + 0);
-		bitmap.set (next + l_leaf * 2 + 1);
-
-		// encode left subtree
-		encodeTree (tree, node->child[0].get (), bitmap);
-
-		// make sure right child's children still have their reservation
-		assert (bitmap.test (next + l_leaf * 2 + 0));
-		assert (bitmap.test (next + l_leaf * 2 + 1));
-
-		// clear right child's children's reservation
-		bitmap.reset (next + l_leaf * 2 + 0);
-		bitmap.reset (next + l_leaf * 2 + 1);
-
-		// encode right subtree
-		encodeTree (tree, node->child[1].get (), bitmap);
+		if (!node->child[0]->isParent ())
+			tree[i] |= 0x80;
+		if (!node->child[1]->isParent ())
+			tree[i] |= 0x40;
 	}
 }
 
@@ -447,7 +371,7 @@ void Node::encodeTree (std::vector<uint8_t> &tree, Node *node, Bitmap &bitmap)
  *  @param[in] len Source data length
  *  @returns Root node
  */
-static std::unique_ptr<Node> buildTree (const uint8_t *src, size_t len)
+std::unique_ptr<Node> buildTree (const uint8_t *src, size_t len)
 {
 	// fill in histogram
 	std::vector<size_t> histogram (256);
@@ -475,7 +399,7 @@ static std::unique_ptr<Node> buildTree (const uint8_t *src, size_t len)
 		// sort nodes by count; we will combine the two smallest nodes
 		std::sort (std::begin (nodes),
 		    std::end (nodes),
-		    [](const std::unique_ptr<Node> &lhs, const std::unique_ptr<Node> &rhs) -> bool {
+		    [] (const std::unique_ptr<Node> &lhs, const std::unique_ptr<Node> &rhs) -> bool {
 			    return *lhs < *rhs;
 		    });
 
@@ -494,6 +418,10 @@ static std::unique_ptr<Node> buildTree (const uint8_t *src, size_t len)
 	// root is the last node left
 	std::unique_ptr<Node> root = std::move (nodes[0]);
 
+	// root must have children
+	if (!root->isParent ())
+		root = future::make_unique<Node> (std::move (root), future::make_unique<Node> (0x00, 0));
+
 	// build Huffman codes
 	Node::buildCodes (root, 0, 0);
 
@@ -505,28 +433,26 @@ static std::unique_ptr<Node> buildTree (const uint8_t *src, size_t len)
 class Bitstream
 {
 public:
-	Bitstream (std::vector<uint8_t> &buffer) : buffer (buffer), pos (32)
+	Bitstream (std::vector<uint8_t> &buffer) : buffer (buffer)
 	{
 	}
 
 	/** @brief Flush bitstream block, padded to 32 bits */
 	void flush ()
 	{
-		if (pos < 32)
-		{
-			// this bitstream block has data
-			data[0] = code >> 0;
-			data[1] = code >> 8;
-			data[2] = code >> 16;
-			data[3] = code >> 24;
+		if (pos >= 32)
+			return;
 
-			// reset bitstream block
-			pos  = 32;
-			code = 0;
+		// append bitstream block to output buffer
+		buffer.reserve (buffer.size () + 4);
+		buffer.emplace_back (code >> 0);
+		buffer.emplace_back (code >> 8);
+		buffer.emplace_back (code >> 16);
+		buffer.emplace_back (code >> 24);
 
-			// append bitstream block to output buffer
-			buffer.insert (std::end (buffer), std::begin (data), std::end (data));
-		}
+		// reset bitstream block
+		pos  = 32;
+		code = 0;
 	}
 
 	/** @brief Push Huffman code onto bitstream
@@ -542,23 +468,20 @@ public:
 
 			// set/reset bit
 			if (code & (1U << (len - i)))
-				code |= (1U << pos);
+				this->code |= (1U << pos);
 			else
-				code &= ~(1U << pos);
+				this->code &= ~(1U << pos);
 
+			// flush bitstream block
 			if (pos == 0)
-			{
-				// flush bitstream block
 				flush ();
-			}
 		}
 	}
 
 private:
 	std::vector<uint8_t> &buffer; ///< Output buffer
-	size_t pos;                   ///< Bit position
-	uint32_t code;                ///< Bitstream block
-	uint8_t data[4];              ///< Bitstream block buffer
+	size_t pos    = 32;           ///< Bit position
+	uint32_t code = 0;            ///< Bitstream block
 };
 }
 
@@ -580,39 +503,15 @@ std::vector<uint8_t> huffEncode (const void *source, size_t len)
 	// allocate Huffman encoded tree
 	std::vector<uint8_t> tree ((count + 2) & ~1);
 
-	// allocate bitmap
-	Bitmap bitmap;
-
 	// first slot encodes tree size
-	bitmap.set (0);
 	tree[0] = count / 2;
 
-	// second slot encodes root node
-	root->setPos (bitmap, 1);
-
 	// encode Huffman tree
-	Node::encodeTree (tree, root.get (), bitmap);
-
-#if 1
-	for (size_t i = 0; i < count + 1; ++i)
-	{
-		std::printf (" %02x", tree[i]);
-		if (i % 8 == 7)
-			std::fputc ('\n', stdout);
-	}
-	std::fputc ('\n', stdout);
-#endif
-
-	root->printTree (0, 0);
-	std::printf ("==============\n");
-	printTable (tree, 1, 0, 0);
-
-#if 1
-	return {};
-#endif
+	Node::encodeTree (tree, root.get ());
 
 	// create output buffer
 	std::vector<uint8_t> result;
+	result.reserve (len); // hopefully our output will be smaller
 
 	// append compression header
 	compressionHeader (result, 0x28, len);
@@ -659,7 +558,7 @@ void huffDecode (const void *src, void *dst, size_t size)
 	uint32_t treeSize   = ((*in) + 1) * 2; // size of the huffman header
 	uint32_t word       = 0;               // 32-bits of input bitstream
 	uint32_t mask       = 0;               // which bit we are reading
-	uint32_t dataMask   = (1 << bits) - 1; // mask to apply to data
+	uint8_t dataMask    = (1 << bits) - 1; // mask to apply to data
 	const uint8_t *tree = in;              // huffman tree
 	size_t node;                           // node in the huffman tree
 	size_t child;                          // child of a node
@@ -684,7 +583,7 @@ void huffDecode (const void *src, void *dst, size_t size)
 		}
 
 		// read the current node's offset value
-		offset = tree[node] & 0x1F;
+		offset = tree[node] & 0x3F;
 
 		child = (node & ~1) + offset * 2 + 2;
 

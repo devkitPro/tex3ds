@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -28,8 +28,8 @@
 #include <vector>
 
 /** @brief LZSS/LZ10 compression
- *  @param[in]  src    Source buffer
- *  @param[in]  len    Source length
+ *  @param[in] src Source buffer
+ *  @param[in] len Source length
  *  @returns Compressed buffer
  */
 std::vector<uint8_t> lzssEncode (const void *src, size_t len);
@@ -37,14 +37,14 @@ std::vector<uint8_t> lzssEncode (const void *src, size_t len);
 /** @brief LZSS/LZ10 decompression
  *  @param[in]  src Source buffer
  *  @param[out] dst Destination buffer
- *  @param[in]  len Source length
+ *  @param[in]  len Destination length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
 void lzssDecode (const void *src, void *dst, size_t len);
 
 /** @brief LZ11 compression
- *  @param[in]  src    Source buffer
- *  @param[in]  len    Source length
+ *  @param[in] src Source buffer
+ *  @param[in] len Source length
  *  @returns Compressed buffer
  */
 std::vector<uint8_t> lz11Encode (const void *src, size_t len);
@@ -52,14 +52,14 @@ std::vector<uint8_t> lz11Encode (const void *src, size_t len);
 /** @brief LZ11 decompression
  *  @param[in]  src Source buffer
  *  @param[out] dst Destination buffer
- *  @param[in]  len Source length
+ *  @param[in]  len Destination length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
 void lz11Decode (const void *src, void *dst, size_t len);
 
 /** @brief Run-length encoding compression
- *  @param[in]  src    Source buffer
- *  @param[in]  len    Source length
+ *  @param[in] src Source buffer
+ *  @param[in] len Source length
  *  @returns Compressed buffer
  */
 std::vector<uint8_t> rleEncode (const void *src, size_t len);
@@ -67,14 +67,14 @@ std::vector<uint8_t> rleEncode (const void *src, size_t len);
 /** @brief Run-length encoding decompression
  *  @param[in]  src Source buffer
  *  @param[out] dst Destination buffer
- *  @param[in]  len Source length
+ *  @param[in]  len Destination length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
 void rleDecode (const void *src, void *dst, size_t len);
 
 /** @brief Huffman compression
- *  @param[in]  src    Source buffer
- *  @param[in]  len    Source length
+ *  @param[in] src Source buffer
+ *  @param[in] len Source length
  *  @returns Compressed buffer
  */
 std::vector<uint8_t> huffEncode (const void *src, size_t len);
@@ -82,7 +82,7 @@ std::vector<uint8_t> huffEncode (const void *src, size_t len);
 /** @brief Huffman decompression
  *  @param[in]  src Source buffer
  *  @param[out] dst Destination buffer
- *  @param[in]  len Source length
+ *  @param[in]  len Destination length
  *  @note The output buffer must be large enough to hold the decompressed data
  */
 void huffDecode (const void *src, void *dst, size_t len);
