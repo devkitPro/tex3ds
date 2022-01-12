@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -74,7 +74,7 @@ void etc1_common (encode::WorkUnit &work, bool alpha)
 
 				// encode etc1 block
 				rg_etc1::pack_etc1_block (
-				    out_block, reinterpret_cast<unsigned int *> (in_block), params);
+				    out_block, reinterpret_cast<unsigned *> (in_block), params);
 			}
 
 			if (work.output)
@@ -93,7 +93,7 @@ void etc1_common (encode::WorkUnit &work, bool alpha)
 
 			if (work.preview)
 			{
-				rg_etc1::unpack_etc1_block (out_block, reinterpret_cast<unsigned int *> (in_block));
+				rg_etc1::unpack_etc1_block (out_block, reinterpret_cast<unsigned *> (in_block));
 
 				for (size_t y = 0; y < 4; ++y)
 				{

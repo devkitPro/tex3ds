@@ -29,6 +29,7 @@
 #include "rg_etc1.h"
 #include "subimage.h"
 #include "swizzle.h"
+#include "utility.h"
 
 #include <getopt.h>
 #include <libgen.h>
@@ -264,8 +265,11 @@ size_t max_image_height = 1024;
 /** @brief Maximum output width */
 size_t max_image_width = 1024;
 
-/** @brief Add a border between atlased images */
-unsigned int border = 0;
+/** @brief Add a transparent border between atlased images */
+unsigned border = 0;
+
+/** @brief Add an colored edge between atlased images */
+unsigned edge = 0;
 
 /** @brief Load image
  *  @param[in] img Input image
@@ -358,18 +362,22 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 	std::vector<Magick::Image> result;
 	if (process_mode == PROCESS_NORMAL || process_mode == PROCESS_ATLAS)
 	{
-		// apply bottom and right border (top/left already applied for atlas)
-		output_width  = potCeil (img.columns () + border);
-		output_height = potCeil (img.rows () + border);
-
+		// apply border/edge
 		if (process_mode == PROCESS_NORMAL)
 		{
-			// apply top and left border
-			output_width += border;
-			output_height += border;
+			output_width  = potCeil (img.columns () + 2 * border);
+			output_height = potCeil (img.rows () + 2 * border);
+		}
+		else
+		{
+			// atlas already has top/left border applied
+			output_width  = potCeil (img.columns () + border);
+			output_height = potCeil (img.rows () + border);
 		}
 
-		if (img.columns () != output_width || img.rows () != output_height)
+		size_t image_width  = img.columns ();
+		size_t image_height = img.rows ();
+		if (image_width != output_width || image_height != output_height)
 		{
 			// expand canvas
 			Magick::Image copy = img;
@@ -377,24 +385,18 @@ std::vector<Magick::Image> load_image (Magick::Image &img)
 			img = Magick::Image (Magick::Geometry (output_width, output_height), transparent ());
 
 			img.composite (copy, Magick::Geometry (0, 0, border, border), Magick::OverCompositeOp);
-
-			if (process_mode == PROCESS_NORMAL)
-			{
-				assert (subimage_data.empty ());
-				subimage_data.emplace_back (0,
-				    "",
-				    static_cast<float> (border) / img.columns (),
-				    1.0f - static_cast<float> (border) / img.rows (),
-				    static_cast<float> (border + copy.columns ()) / img.columns (),
-				    1.0f - static_cast<float> (border + copy.rows ()) / img.rows (),
-				    false);
-			}
 		}
-		else if (process_mode == PROCESS_NORMAL)
+
+		if (process_mode == PROCESS_NORMAL)
 		{
-			// a perfect fit
 			assert (subimage_data.empty ());
-			subimage_data.emplace_back (0, "", 0.0f, 1.0f, 1.0f, 0.0f, false);
+			subimage_data.emplace_back (0,
+			    "",
+			    static_cast<float> (border + edge) / output_width,
+			    1.0f - static_cast<float> (border + edge) / output_height,
+			    static_cast<float> (border + image_width - edge) / output_width,
+			    1.0f - static_cast<float> (border + image_height - edge) / output_height,
+			    false);
 		}
 
 		// push the source image
@@ -736,6 +738,9 @@ void process_image (Magick::Image &img)
 		size_t width  = img.columns ();
 		size_t height = img.rows ();
 
+		assert (width % 8 == 0);
+		assert (height % 8 == 0);
+
 		// all formats are swizzled except ETC1/ETC1A4
 		if (process_format != ETC1 && process_format != ETC1A4)
 			swizzle (img, false);
@@ -1007,27 +1012,27 @@ void write_image_data (FILE *fp)
 	switch (compression_format)
 	{
 	case COMPRESSION_NONE:
-		compress = compressNone;
+		compress = &compressNone;
 		break;
 
 	case COMPRESSION_LZ10:
-		compress = lzssEncode;
+		compress = &lzssEncode;
 		break;
 
 	case COMPRESSION_LZ11:
-		compress = lz11Encode;
+		compress = &lz11Encode;
 		break;
 
 	case COMPRESSION_RLE:
-		compress = rleEncode;
+		compress = &rleEncode;
 		break;
 
 	case COMPRESSION_HUFF:
-		compress = huffEncode;
+		compress = &huffEncode;
 		break;
 
 	case COMPRESSION_AUTO:
-		compress = compressAuto;
+		compress = &compressAuto;
 		break;
 
 	default:
@@ -1211,17 +1216,15 @@ void print_usage (const char *prog)
 	    "    -m, --mipmap <filter>        Generate mipmaps. See \"Mipmap Filter Options\"\n"
 	    "    -o, --output <output>        Output file\n"
 	    "    -p, --preview <preview>      Output preview file\n"
-	    "    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), "
-	    "high\n"
+	    "    -q, --quality <etc1-quality> ETC1 quality. Valid options: low, medium (default), high\n"
 	    "    -r, --raw                    Output image data only\n"
 	    "    -t, --trim                   Trim input image(s)\n"
 	    "    -v, --version                Show version and copyright information\n"
 	    "    -z, --compress <compression> Compress output. See \"Compression Options\"\n"
-	    "    --atlas                      Generate texture atlas\n"
-	    "    --cubemap                    Generate a cubemap. See \"Cubemap\"\n"
-	    "    --skybox                     Generate a skybox. See \"Skybox\"\n"
-	    "    --border                     Inserts a 1px transparent border around the final "
-	    "image in default and atlas mode and between images in atlas mode\n"
+	    "    -a, --atlas                  Generate texture atlas\n"
+	    "    -c, --cubemap                Generate a cubemap. See \"Cubemap\"\n"
+	    "    -s, --skybox                 Generate a skybox. See \"Skybox\"\n"
+	    "    -b, --border <border-type>   Inserts a border around each image. See \"Border Options\"\n"
 	    "    <input>                      Input file\n\n"
 
 	    "  Format Options:\n"
@@ -1303,6 +1306,11 @@ void print_usage (const char *prog)
 	    "      0x28: Huffman encoding\n"
 	    "      0x30: Run-length encoding\n\n"
 
+		"  Border Options:\n"
+		"    -b none        No border (default)\n"
+		"    -b transparent 1px transparent shared border around images\n"
+		"    -b edge        1px color-matched unshared border around images\n\n"
+
 	    "  Cubemap:\n"
 	    "    A cubemap is generated from the input image in the following convention:\n"
 	    "    +----+----+---------+\n"
@@ -1328,10 +1336,11 @@ void print_usage (const char *prog)
 const struct option long_options[] = {
     /* clang-format off */
 	{ "atlas",    no_argument,       nullptr, 'a', },
-	{ "border",   no_argument,       nullptr, 'b', },
+	{ "border",   required_argument, nullptr, 'b', },
 	{ "cubemap",  no_argument,       nullptr, 'c', },
 	{ "depends",  required_argument, nullptr, 'd', },
 	{ "format",   required_argument, nullptr, 'f', },
+	{ "header",   required_argument, nullptr, 'H', },
 	{ "help",     no_argument,       nullptr, 'h', },
 	{ "include",  required_argument, nullptr, 'i', },
 	{ "mipmap",   required_argument, nullptr, 'm', },
@@ -1466,8 +1475,29 @@ ParseStatus parseOptions (std::vector<char *> &args)
 
 		case 'b':
 			// border
-			max_image_height = max_image_width = 1023;
-			border = 1;
+			if (strcasecmp (optarg, "transparent") == 0)
+			{
+				max_image_height = max_image_width = 1023;
+				border = 1;
+				edge = 0;
+			}
+			else if (strcasecmp (optarg, "edge") == 0)
+			{
+				max_image_height = max_image_width = 1024;
+				border = 0;
+				edge = 1;
+			}
+			else if (strcasecmp (optarg, "none") == 0)
+			{
+				max_image_height = max_image_width = 1024;
+				border = 0;
+				edge = 0;
+			}
+			else
+			{
+				std::fprintf (stderr, "Invalid border option '%s'\n", optarg);
+				return PARSE_FAILURE;
+			}
 			break;
 
 		case 'c':
@@ -1642,9 +1672,9 @@ ParseStatus parseOptions (std::vector<char *> &args)
 
 	assert (optind >= 0);
 
-	if (border && process_mode != PROCESS_ATLAS && process_mode != PROCESS_NORMAL)
+	if ((border || edge) && process_mode != PROCESS_ATLAS && process_mode != PROCESS_NORMAL)
 	{
-		const char *mode = process_mode == PROCESS_CUBEMAP ? "cubemaps": "skyboxes";
+		const char *mode = process_mode == PROCESS_CUBEMAP ? "cubemaps" : "skyboxes";
 		std::fprintf(stderr, "--border cannot be applied to %s", mode);
 		return PARSE_FAILURE;
 	}
@@ -1658,7 +1688,6 @@ ParseStatus parseOptions (std::vector<char *> &args)
 
 	return PARSE_SUCCESS;
 }
-
 }
 
 /** @brief Program entry point
@@ -1703,7 +1732,7 @@ int main (int argc, char *argv[])
 		std::vector<Magick::Image> images;
 		if (process_mode == PROCESS_ATLAS)
 		{
-			Atlas atlas (Atlas::build (input_files, trim, border));
+			Atlas atlas (Atlas::build (input_files, trim, border, edge));
 			subimage_data.swap (atlas.subs);
 
 			images = load_image (atlas.img);
@@ -1718,10 +1747,10 @@ int main (int argc, char *argv[])
 			Magick::Image img (input_files[0]);
 
 			if (trim)
-			{
-				img.trim ();
-				img.page (Magick::Geometry (img.columns (), img.rows ()));
-			}
+				img = applyTrim (img);
+
+			if (edge)
+				applyEdge (img);
 
 			images = load_image (img);
 		}

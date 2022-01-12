@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2021
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -71,7 +71,7 @@ struct SubImage
 		return index < rhs.index;
 	}
 
-	void print (unsigned int width, unsigned int height) const
+	void print (unsigned width, unsigned height) const
 	{
 		if (rotated)
 			std::printf ("%4zu \"%s\"\n"

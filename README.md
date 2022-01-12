@@ -5,6 +5,7 @@
 ```
 Usage: ./tex3ds [OPTIONS...] <input>
   Options:
+    -d, --depends <file>         Output dependency file
     -f, --format <format>        See "Format Options"
     -H, --header <file>          Output C header to file
     -h, --help                   Show this help message
@@ -17,9 +18,10 @@ Usage: ./tex3ds [OPTIONS...] <input>
     -t, --trim                   Trim input image(s)
     -v, --version                Show version and copyright information
     -z, --compress <compression> Compress output. See "Compression Options"
-    --atlas                      Generate texture atlas
-    --cubemap                    Generate a cubemap. See "Cubemap"
-    --skybox                     Generate a skybox. See "Skybox"
+    -a, --atlas                  Generate texture atlas
+    -c, --cubemap                Generate a cubemap. See "Cubemap"
+    -s, --skybox                 Generate a skybox. See "Skybox"
+    -b, --border <border-type>   Inserts a border around each image. See "Border Options"
     <input>                      Input file
 ```
 
@@ -119,7 +121,7 @@ Usage: ./tex3ds [OPTIONS...] <input>
 ```
     -z auto              Automatically select best compression (default)
     -z none              No compression
-    -z huff, -z huffman  Huffman encoding (possible to produce garbage)
+    -z huff, -z huffman  Huffman encoding
     -z lzss, -z lz10     LZSS compression
     -z lz11              LZ11 compression
     -z rle               Run-length encoding
@@ -136,6 +138,15 @@ Usage: ./tex3ds [OPTIONS...] <input>
       0x11: LZ11
       0x28: Huffman encoding
       0x30: Run-length encoding
+```
+
+## Border Options
+
+```
+  Border Options:
+    -b none        No border (default)
+    -b transparent 1px transparent shared border around images
+    -b edge        1px color-matched unshared border around images
 ```
 
 ## Cubemap

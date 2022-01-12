@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2022
+ * Copyright (c) 2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -17,31 +17,13 @@
  * You should have received a copy of the GNU General Public License
  * along with tex3ds.  If not, see <http://www.gnu.org/licenses/>.
  *----------------------------------------------------------------------------*/
-/** @file atlas.h
- *  @brief Atlas interface.
+/** @file utility.h
+ *  @brief Utility functions.
  */
 #pragma once
 
 #include "magick_compat.h"
-#include "subimage.h"
 
-#include <string>
-#include <vector>
+Magick::Image applyTrim (Magick::Image &img);
 
-struct Atlas
-{
-	Magick::Image img;
-	std::vector<SubImage> subs;
-
-	Atlas ()
-	{
-	}
-
-	Atlas (const Atlas &other) = delete;
-	Atlas (Atlas &&other)      = default;
-	Atlas &operator= (const Atlas &other) = delete;
-	Atlas &operator= (Atlas &&other) = delete;
-
-	static Atlas
-	    build (const std::vector<std::string> &paths, bool trim, unsigned border, unsigned edge);
-};
+void applyEdge (Magick::Image &img);

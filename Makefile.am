@@ -13,6 +13,7 @@ tex3ds_SOURCES = source/atlas.cpp \
                  source/rle.cpp \
                  source/swizzle.cpp \
                  source/tex3ds.cpp \
+                 source/utility.cpp \
                  include/atlas.h \
                  include/compress.h \
                  include/encode.h \
@@ -21,7 +22,8 @@ tex3ds_SOURCES = source/atlas.cpp \
                  include/quantum.h \
                  include/rg_etc1.h \
                  include/subimage.h \
-                 include/swizzle.h
+                 include/swizzle.h \
+                 include/utility.h
 
 mkbcfnt_SOURCES = source/bcfnt.cpp \
                   source/freetype.cpp \

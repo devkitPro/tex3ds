@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2019
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -328,8 +328,8 @@ void lzssDecode (const void *source, void *dest, size_t size)
 	uint8_t *dst       = (uint8_t *)dest;
 	uint8_t flags      = 0;
 	uint8_t mask       = 0;
-	unsigned int len;
-	unsigned int disp;
+	unsigned len;
+	unsigned disp;
 
 	while (size > 0)
 	{

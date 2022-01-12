@@ -1,5 +1,5 @@
 /*------------------------------------------------------------------------------
- * Copyright (c) 2017-2021
+ * Copyright (c) 2017-2022
  *     Michael Theall (mtheall)
  *
  * This file is part of tex3ds.
@@ -23,6 +23,7 @@
 
 #include "atlas.h"
 #include "subimage.h"
+#include "utility.h"
 
 #include <algorithm>
 #include <cmath>
@@ -57,7 +58,7 @@ struct Block
 	Block &operator= (const Block &other) = delete;
 	Block &operator= (Block &&other) = delete;
 
-	Block (size_t index, const Magick::Image &img, unsigned int border)
+	Block (size_t index, const Magick::Image &img, unsigned border)
 	    : index (index),
 	      img (img),
 	      x (0),
@@ -68,20 +69,20 @@ struct Block
 	{
 	}
 
-	SubImage subImage (const Magick::Image &atlas, unsigned int border) const
+	SubImage subImage (const Magick::Image &atlas, unsigned border, unsigned edge) const
 	{
 		size_t width  = atlas.columns () + border;
 		size_t height = atlas.rows () + border;
 
-		float left   = static_cast<float> (x + border) / width;
-		float top    = 1.0f - (static_cast<float> (y + border) / height);
-		float right  = static_cast<float> (x + w) / width;
-		float bottom = 1.0f - (static_cast<float> (y + h) / height);
+		float left   = static_cast<float> (x + border + edge) / width;
+		float top    = 1.0f - (static_cast<float> (y + border + edge) / height);
+		float right  = static_cast<float> (x + w - edge) / width;
+		float bottom = 1.0f - (static_cast<float> (y + h - edge) / height);
 
-		assert (left * width == x + border);
-		assert ((1.0f - top) * height == y + border);
-		assert (right * width == x + w);
-		assert ((1.0f - bottom) * height == y + h);
+		assert (left * width == x + border + edge);
+		assert ((1.0f - top) * height == y + border + edge);
+		assert (right * width == x + w - edge);
+		assert ((1.0f - bottom) * height == y + h - edge);
 
 		if (rotated)
 			return SubImage (index, img.fileName (), bottom, left, top, right, true);
@@ -111,7 +112,7 @@ struct Packer
 	std::set<XY> free;
 
 	size_t width, height;
-	unsigned int border;
+	unsigned border;
 
 	Packer ()                    = delete;
 	Packer (const Packer &other) = delete;
@@ -119,10 +120,7 @@ struct Packer
 	Packer &operator= (const Packer &other) = delete;
 	Packer &operator= (Packer &&other) = default;
 
-	Packer (const std::vector<Magick::Image> &images,
-	    size_t width,
-	    size_t height,
-	    unsigned int border);
+	Packer (const std::vector<Magick::Image> &images, size_t width, size_t height, unsigned border);
 
 	Magick::Image composite () const
 	{
@@ -197,7 +195,7 @@ struct Packer
 Packer::Packer (const std::vector<Magick::Image> &images,
     size_t width,
     size_t height,
-    unsigned int border)
+    unsigned border)
     : placed (), next (), free (), width (width), height (height), border (border)
 {
 	for (const auto &img : images)
@@ -371,7 +369,10 @@ struct AreaSizeComparator
 };
 }
 
-Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, unsigned int border)
+Atlas Atlas::build (const std::vector<std::string> &paths,
+    bool trim,
+    unsigned border,
+    unsigned edge)
 {
 	std::vector<Magick::Image> images;
 
@@ -380,10 +381,10 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, unsigned i
 		Magick::Image img (path);
 
 		if (trim)
-		{
-			img.trim ();
-			img.page (Magick::Geometry (img.columns (), img.rows ()));
-		}
+			img = applyTrim (img);
+
+		if (edge)
+			applyEdge (img);
 
 		img.attribute ("index", std::to_string (images.size ()));
 		images.emplace_back (std::move (img));
@@ -422,12 +423,12 @@ Atlas Atlas::build (const std::vector<std::string> &paths, bool trim, unsigned i
 
 			atlas.img = packer.composite ();
 			for (auto &block : packer.placed)
-				atlas.subs.emplace_back (block.subImage (atlas.img, border));
+				atlas.subs.emplace_back (block.subImage (atlas.img, border, edge));
 
 			std::sort (std::begin (atlas.subs), std::end (atlas.subs));
 			return atlas;
 		}
 	}
 
-	throw std::runtime_error ("No atlas solution found.\n");
+	throw std::runtime_error ("No atlas solution found.");
 }
