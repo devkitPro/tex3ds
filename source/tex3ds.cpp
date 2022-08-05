@@ -277,18 +277,10 @@ unsigned edge = 0;
  */
 std::vector<Magick::Image> load_image (Magick::Image &img)
 {
-	// check for RGB colorspace
-	switch (img.colorSpace ())
-	{
-	case Magick::RGBColorspace:
-	case Magick::sRGBColorspace:
-		break;
-
-	default:
-		// convert to RGB colorspace
-		img.colorSpace (Magick::RGBColorspace);
-		break;
-	}
+	// Convert to RGBA
+	Magick::Image img_tmp(img.size (), transparent ());
+	img_tmp.composite (img, img.size (), Magick::OverCompositeOp);
+	img = img_tmp;
 
 	// double-check RGB channels
 	if (!has_rgb (img))
