@@ -83,13 +83,18 @@ const uint8_t *find_best_match (const uint8_t *start,
 	const uint8_t *best_start = buffer;
 	size_t best_len           = 0;
 
+	const uint8_t *p = buffer;
+
 	// find nearest matching start byte
-	const uint8_t *p = rfind (start, buffer, *buffer);
-	while (p)
+	while ((p = rfind (start, p, *buffer)))
 	{
+		// confirm that this match is as good as the best match so far
+		if(memcmp(p, buffer, best_len))
+			continue;
+
 		// find length of match
-		size_t test_len = 1;
-		for (size_t i = 1; i < len; ++i)
+		size_t test_len = best_len;
+		for (size_t i = best_len; i < len; ++i)
 		{
 			if (p[i] == buffer[i])
 				++test_len;
@@ -107,9 +112,6 @@ const uint8_t *find_best_match (const uint8_t *start,
 		// if we maximized the match, stop here
 		if (best_len == len)
 			break;
-
-		// find next nearest matching byte and try again
-		p = rfind (start, p, *buffer);
 	}
 
 	if (best_len)
