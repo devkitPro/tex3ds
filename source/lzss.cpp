@@ -89,7 +89,7 @@ const uint8_t *find_best_match (const uint8_t *start,
 	while ((p = rfind (start, p, *buffer)))
 	{
 		// confirm that this match is as good as the best match so far
-		if(memcmp(p, buffer, best_len))
+		if (std::memcmp (p, buffer, best_len) != 0)
 			continue;
 
 		// find length of match
